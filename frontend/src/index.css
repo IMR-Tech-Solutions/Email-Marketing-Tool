@@ -1,0 +1,546 @@
+@import "tailwindcss";
+
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..600&display=swap");
+
+/*
+ * Clean, green, product-SaaS.
+ *
+ * A neutral grey page holds one big rounded white shell: white rail on the
+ * left with a green active marker, white cards on a faintly tinted workspace.
+ * Deep green is the only brand colour; hatching marks anything empty or
+ * remaining, which doubles as a non-colour channel on charts.
+ */
+:root {
+  --canvas:        #eeeeee;  /* page behind the shell */
+  --shell:         #ffffff;  /* the app card          */
+  --rail:          #ffffff;  /* sidebar               */
+  --work:          #fbfbfb;  /* workspace behind cards*/
+  --surface:       #ffffff;  /* cards                 */
+  --surface-2:     #f7f8f7;  /* inset rows, headers   */
+  --surface-3:     #eef0ee;  /* hovers, tracks        */
+
+  --border:        #eaeaea;
+  --border-strong: #dcdedc;
+
+  --ink:           #111813;
+  --ink-2:         #3d453f;
+  --ink-3:         #6b736d;
+  --ink-4:         #9aa19c;
+
+  /* Brand */
+  --green:         #1f7a45;
+  --green-hover:   #176036;
+  --green-deep:    #14532d;
+  --green-mid:     #34a85c;
+  --green-light:   #5fcb8a;
+  --green-soft:    #e9f6ee;
+  --green-border:  #bfe3cd;
+
+  --ink-card:      #101512;  /* the black accent card */
+
+  --good:          #1f7a45;
+  --good-soft:     #e9f6ee;
+  --good-border:   #bfe3cd;
+
+  --warn:          #b8791a;
+  --warn-soft:     #fdf5e7;
+  --warn-border:   #f0dcb4;
+
+  --bad:           #c2402f;
+  --bad-soft:      #fdeeeb;
+  --bad-border:    #f5cdc5;
+
+  --blue:          #3f7ad6;
+
+  /*
+   * Freshness: an ordinal green ramp, light to dark as records decay.
+   * Validated on white - monotone lightness, every adjacent gap >= 0.06,
+   * light end 2.02:1, hue spread 4 degrees.
+   */
+  --fresh-1: #5fcb8a;
+  --fresh-2: #34a85c;
+  --fresh-3: #1f7a45;
+  --fresh-4: #145c33;
+  --fresh-5: #0a3d22;
+
+  /* Categorical trio: green / blue / amber. All checks pass. */
+  --cat-1: #1f7a45;
+  --cat-2: #3f7ad6;
+  --cat-3: #b8791a;
+
+  --shadow-sm: 0 1px 2px rgba(17, 24, 19, 0.04);
+  --shadow-md: 0 6px 20px rgba(17, 24, 19, 0.07);
+  --shadow-lg: 0 24px 64px rgba(17, 24, 19, 0.18);
+
+  /*
+   * Weight scale. Geist is an interface face, so this uses real UI weights
+   * rather than hairlines: headings and figures carry presence, body sits at
+   * regular, and small text steps up so it survives at 11-12px.
+   */
+  --w-display: 650;
+  --w-body: 400;
+  --w-strong: 550;
+  --w-small: 550;
+
+  --rail-w: 236px;
+  --rail-w-collapsed: 76px;
+
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: var(--w-body);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--green);
+  text-decoration: none;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d6dad7;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------ *
+ * Type                                                                *
+ * ------------------------------------------------------------------ */
+
+/* Geist Mono keeps the whole app on one superfamily. */
+.mono {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 450;
+  font-feature-settings: "zero";
+}
+
+.page-title {
+  font-size: 29px;
+  font-weight: var(--w-display);
+  letter-spacing: -0.033em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.page-sub {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: var(--w-display);
+  letter-spacing: -0.025em;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: var(--w-strong);
+  letter-spacing: -0.018em;
+}
+
+/* The big numbers. Geist has proper tabular figures, so columns line up. */
+.figure {
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "cv01";
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: var(--w-small);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+/* ------------------------------------------------------------------ *
+ * Hatching - the "empty / remaining" texture, also the chart's
+ * non-colour channel.
+ * ------------------------------------------------------------------ */
+
+.hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--border-strong) 0 2px,
+    transparent 2px 7px
+  );
+}
+.hatch-green {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--green-border) 0 2px,
+    transparent 2px 7px
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Surfaces                                                            *
+ * ------------------------------------------------------------------ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The dark accent card from the reference. */
+.card-dark {
+  background: var(--ink-card);
+  border-radius: 18px;
+  color: #fff;
+}
+/* A touch more weight on a dark ground, where strokes read thinner. */
+.card-dark .figure {
+  font-weight: 620;
+}
+
+/* Circular ghost button that sits in a stat card's corner. */
+.corner-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--ink-3);
+  transition: background 0.14s ease, color 0.14s ease;
+  flex: none;
+}
+.corner-btn:hover {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+.corner-btn-on-dark {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.corner-btn-on-dark:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+/* ------------------------------------------------------------------ *
+ * Pills, buttons, fields                                              *
+ * ------------------------------------------------------------------ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: var(--w-small);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.pill-brand,
+.pill-good {
+  color: var(--green);
+  background: var(--green-soft);
+  border-color: var(--green-border);
+}
+.pill-warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: var(--warn-border);
+}
+.pill-bad {
+  color: var(--bad);
+  background: var(--bad-soft);
+  border-color: var(--bad-border);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: var(--w-strong);
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.btn:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.btn:disabled {
+  opacity: 0.45;
+}
+
+.btn-primary {
+  border-color: transparent;
+  background: var(--green);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--green-hover);
+}
+
+.btn-dark {
+  border-color: transparent;
+  background: var(--ink-card);
+  color: #fff;
+}
+
+.btn-danger {
+  border-color: transparent;
+  background: var(--bad);
+  color: #fff;
+}
+
+.btn-sm {
+  height: 32px;
+  padding: 0 13px;
+  font-size: 12.5px;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-3);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.field {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.field:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+.field::placeholder {
+  color: var(--ink-4);
+}
+.field:disabled {
+  background: var(--surface-3);
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * Segmented tabs                                                      *
+ *
+ * These three screens each used to stack every section in one long
+ * column. Tabs are what let a dense panel show one thing at a time.
+ * ------------------------------------------------------------------ */
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+
+.seg-btn {
+  height: 30px;
+  padding: 0 15px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: var(--w-strong);
+  color: var(--ink-3);
+  white-space: nowrap;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.seg-btn:hover {
+  color: var(--ink);
+}
+.seg-btn[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ------------------------------------------------------------------ *
+ * Small shared pieces                                                 *
+ * ------------------------------------------------------------------ */
+
+/* A row of facts under a heading: website - city - founded. */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.meta a {
+  color: var(--green);
+  font-weight: var(--w-strong);
+}
+
+/* The small print. There was far too much of it inline; what is left
+   uses this so it reads as an aside rather than as content. */
+.quiet {
+  font-size: 11.5px;
+  color: var(--ink-4);
+  line-height: 1.55;
+}
+
+/* Numbers across the top of a screen. */
+.stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  padding: 14px 20px;
+}
+.stat-strip .figure {
+  font-size: 20px;
+  line-height: 1.1;
+  display: block;
+}
+
+/* Anchored popover, for the export menu. */
+.pop {
+  position: absolute;
+  z-index: 40;
+  min-width: 210px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+}
+.pop-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--ink-2);
+  text-align: left;
+}
+.pop-item:hover {
+  background: var(--surface-2);
+}
+
+/* Reading pane for a drafted message. */
+.letter {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.letter-head {
+  padding: 11px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  font-weight: var(--w-strong);
+}
+.letter-body {
+  padding: 16px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tables                                                              *
+ * ------------------------------------------------------------------ */
+
+.trow {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s ease;
+}
+.trow:last-child {
+  border-bottom: none;
+}
+.trow:hover {
+  background: var(--surface-2);
+}
+
+.thead {
+  font-size: 11px;
+  font-weight: var(--w-small);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------------------ *
+ * Motion                                                              *
+ * ------------------------------------------------------------------ */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.rise { animation: rise 0.28s ease both; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+  * { transition-duration: 0.01ms !important; }
+}
