@@ -18,6 +18,7 @@ import {
   PipelineState,
   RunPipelineResponse,
   SearchArea,
+  IndustryFilter,
   SessionResponse,
   SuppressionEntry,
   SuppressionListResponse,
@@ -160,10 +161,11 @@ export const api = {
     companyCount: number,
     crmConfig: CrmConfig,
     location?: SearchArea,
+    industry?: IndustryFilter,
   ) {
     return request<RunPipelineResponse>('/api/run-pipeline', {
       method: 'POST',
-      body: {icp, companyCount, crmConfig, location},
+      body: {icp, companyCount, crmConfig, location, industry},
     });
   },
 

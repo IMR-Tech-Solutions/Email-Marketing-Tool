@@ -31,6 +31,7 @@ from .schemas import (
     CompanyList,
     DecisionMaker,
     EnrichmentDraft,
+    IndustryFilter,
     OutreachDraft,
     ReplyClassification,
     SearchArea,
@@ -67,6 +68,33 @@ def _area_rule(area: "SearchArea | None") -> str:
         "Geography is also part of the ICP score: an account that fits the "
         "profile but sits outside this area does not belong in the results at "
         "all."
+    )
+
+
+def _industry_rule(industry: "IndustryFilter | None") -> str:
+    """The sector instruction, or nothing at all.
+
+    Binds the same way `_area_rule` does, and for the same reason: asked for
+    six medical device companies, a model will reach into adjacent healthcare
+    to fill the count, and the list reads correctly until someone checks what
+    the companies actually sell. Fewer is the right answer.
+    """
+    if industry is None or not industry.is_set:
+        return ""
+
+    name = industry.value.strip()
+
+    return (
+        f"\n\nINDUSTRY. Every company must operate in {name}, and its "
+        "`industry` field must say so in those terms.\n"
+        "This is a hard filter, not a preference. If you cannot find enough "
+        "companies in that sector that fit the profile, RETURN FEWER. Do not "
+        "reach into adjacent or parent sectors to make up the number.\n"
+        "Judge by what the company actually sells, not by who it sells to: a "
+        "software vendor serving hospitals is not a healthcare company. Where "
+        "the ICP text names other sectors, this filter wins.\n"
+        "Industry is also part of the ICP score: an account outside this "
+        "sector does not belong in the results at all."
     )
 
 T = TypeVar("T", bound=BaseModel)
@@ -210,16 +238,27 @@ class SalesAgents:
     # ------------------------------------------------------------------
 
     async def discover_companies(
-        self, icp: str, company_count: int, area: SearchArea | None = None
+        self,
+        icp: str,
+        company_count: int,
+        area: SearchArea | None = None,
+        industry: IndustryFilter | None = None,
     ) -> AgentResult[CompanyList]:
         """Large tier: this is research, and it sets up everything downstream.
 
-        `area` narrows the search to a city, state or country. It goes in the
-        prompt rather than the output schema, so it costs nothing against the
-        structured-output complexity budget - see the note in schemas.py.
+        `area` narrows the search to a city, state or country, and `industry`
+        to a sector. Both go in the prompt rather than the output schema, so
+        they cost nothing against the structured-output complexity budget -
+        see the note in schemas.py.
         """
         where = area.as_label() if area else "worldwide"
-        logger.info("[Discovery] Finding %d companies in %s...", company_count, where)
+        sector = industry.as_label() if industry else "all industries"
+        logger.info(
+            "[Discovery] Finding %d companies in %s (%s)...",
+            company_count,
+            where,
+            sector,
+        )
 
         system = (
             "You are a B2B lead discovery and company research agent.\n"
@@ -244,14 +283,18 @@ class SalesAgents:
             "owns the relationship, because the next thing that happens to an "
             "address or a number is a real send or a real call."
             + _area_rule(area)
+            + _industry_rule(industry)
         )
 
         prompt = (
             f"Find {company_count} B2B companies "
+            + (f"in the {industry.value.strip()} sector " if industry and industry.is_set else "")
             + (f"in {area.as_label()} " if area and area.is_set else "")
             + f"matching this Ideal Customer Profile:\n\n{icp}\n\n"
             "For each one, fill in every field:\n"
-            "  name, industry, revenue  - a band such as '$14.5M' is fine\n"
+            "  name, revenue            - a band such as '$14.5M' is fine\n"
+            "  industry                 - the sector they operate in, and it "
+            "must name the sector asked for above where one was given\n"
             "  employees                - headcount, as a number\n"
             "  website                  - the bare domain, no scheme\n"
             "  headquarters             - city and country, and it must name "

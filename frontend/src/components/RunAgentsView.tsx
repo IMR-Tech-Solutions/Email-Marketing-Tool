@@ -8,12 +8,21 @@ import {
   Check,
   MapPin,
   Globe,
+  Search,
+  Factory,
+  Layers,
 } from 'lucide-react';
 import { ICP_PRESETS, CUSTOM_TEMPLATE, IcpPreset } from '../lib/icpPresets';
-import { GeoScope, SearchArea } from '../types';
+import { INDUSTRY_GROUPS, ALL_INDUSTRIES } from '../lib/industries';
+import { GeoScope, SearchArea, IndustryMode, IndustryFilter } from '../types';
 
 interface RunAgentsViewProps {
-  onRunPipeline: (icp: string, count: number, location?: SearchArea) => Promise<void>;
+  onRunPipeline: (
+    icp: string,
+    count: number,
+    location?: SearchArea,
+    industry?: IndustryFilter,
+  ) => Promise<void>;
   isGenerating: boolean;
   modelLarge?: string;
   modelSmall?: string;
@@ -54,6 +63,12 @@ const PLACEHOLDER: Record<GeoScope, string> = {
   global: '',
 };
 
+const INDUSTRY_MODES: { id: IndustryMode; label: string }[] = [
+  { id: 'all', label: 'All industries' },
+  { id: 'preset', label: 'Pick a sector' },
+  { id: 'custom', label: 'Custom' },
+];
+
 export function RunAgentsView({
   onRunPipeline,
   isGenerating,
@@ -65,6 +80,9 @@ export function RunAgentsView({
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [scope, setScope] = useState<GeoScope>('global');
   const [area, setArea] = useState('');
+  const [industryMode, setIndustryMode] = useState<IndustryMode>('all');
+  const [industry, setIndustry] = useState('');
+  const [industryQuery, setIndustryQuery] = useState('');
 
   const apply = (preset: IcpPreset) => {
     setIcp(preset.text);
@@ -77,11 +95,26 @@ export function RunAgentsView({
   };
 
   const needsArea = scope !== 'global' && !area.trim();
+  const needsIndustry = industryMode !== 'all' && !industry.trim();
+
+  /** The pick-list, narrowed by the search box. Empty query shows everything. */
+  const q = industryQuery.trim().toLowerCase();
+  const industryMatches = q
+    ? INDUSTRY_GROUPS.map((g) => ({
+        ...g,
+        items: g.items.filter((name) => name.toLowerCase().includes(q)),
+      })).filter((g) => g.items.length > 0)
+    : INDUSTRY_GROUPS;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!icp.trim() || isGenerating || needsArea) return;
-    onRunPipeline(icp, count, { scope, value: scope === 'global' ? '' : area.trim() });
+    if (!icp.trim() || isGenerating || needsArea || needsIndustry) return;
+    onRunPipeline(
+      icp,
+      count,
+      { scope, value: scope === 'global' ? '' : area.trim() },
+      { mode: industryMode, value: industryMode === 'all' ? '' : industry.trim() },
+    );
   };
 
   // The template still has its slots in it - running that wastes money.
@@ -253,6 +286,140 @@ export function RunAgentsView({
         </div>
       </div>
 
+      {/* Industry */}
+      <div className="card overflow-hidden">
+        <div className="card-head">
+          <div className="card-title">Industry</div>
+          <span className="pill">
+            {industryMode === 'all' ? (
+              <>
+                <Layers className="w-3 h-3" strokeWidth={2.4} /> All industries
+              </>
+            ) : (
+              <>
+                <Factory className="w-3 h-3" strokeWidth={2.4} />
+                {industry.trim() || 'Pick a sector'}
+              </>
+            )}
+          </span>
+        </div>
+
+        <div className="p-5 flex flex-col gap-3.5">
+          <div className="seg self-start" role="tablist">
+            {INDUSTRY_MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                role="tab"
+                aria-selected={industryMode === m.id}
+                onClick={() => {
+                  setIndustryMode(m.id);
+                  // Switching modes clears the pick — a sector chosen from the
+                  // list and one typed by hand are not the same answer, and
+                  // carrying one into the other silently mislabels the run.
+                  setIndustry('');
+                  setIndustryQuery('');
+                }}
+                disabled={isGenerating}
+                className="seg-btn"
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {industryMode === 'preset' && (
+            <>
+              <div className="relative self-start">
+                <Search
+                  className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
+                  strokeWidth={2.4}
+                  style={{ color: 'var(--ink-4)' }}
+                />
+                <input
+                  value={industryQuery}
+                  onChange={(e) => setIndustryQuery(e.target.value)}
+                  disabled={isGenerating}
+                  placeholder="Search industries…"
+                  className="field"
+                  style={{ paddingLeft: 40, width: 260, borderRadius: 999, fontSize: 13.5 }}
+                />
+              </div>
+
+              {industryMatches.length === 0 ? (
+                <p className="quiet">
+                  Nothing matches “{industryQuery.trim()}”. Switch to{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIndustryMode('custom');
+                      setIndustry(industryQuery.trim());
+                      setIndustryQuery('');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      font: 'inherit',
+                      color: 'var(--green)',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    Custom
+                  </button>{' '}
+                  to use it anyway.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-3" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  {industryMatches.map((g) => (
+                    <div key={g.head}>
+                      <div className="eyebrow mb-1.5">{g.head}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {g.items.map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => setIndustry(name)}
+                            disabled={isGenerating}
+                            className="pill"
+                            style={{
+                              cursor: 'pointer',
+                              color: industry === name ? 'var(--green)' : undefined,
+                              borderColor: industry === name ? 'var(--green-border)' : undefined,
+                              background: industry === name ? 'var(--green-soft)' : undefined,
+                            }}
+                          >
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {industryMode === 'custom' && (
+            <input
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              disabled={isGenerating}
+              placeholder="e.g. CNC machining, cold-chain logistics, marine insurance"
+              className="field"
+              style={{ fontSize: 13.5, maxWidth: 420 }}
+            />
+          )}
+
+          <p className="quiet">
+            {industryMode === 'all'
+              ? 'No sector constraint — the agent picks whichever industries the profile fits best.'
+              : 'A hard filter, like geography. The agent returns fewer accounts rather than drifting into adjacent sectors to fill the count. Leave the ICP text describing who they are and why now — this narrows what counts as a match.'}
+          </p>
+        </div>
+      </div>
+
       {/* The prompt itself */}
       <form onSubmit={handleSubmit} className="card overflow-hidden">
         <div className="card-head">
@@ -323,8 +490,14 @@ export function RunAgentsView({
 
             <button
               type="submit"
-              disabled={isGenerating || !icp.trim() || needsArea}
-              title={needsArea ? `Type a ${scope}, or switch to Worldwide` : undefined}
+              disabled={isGenerating || !icp.trim() || needsArea || needsIndustry}
+              title={
+                needsArea
+                  ? `Type a ${scope}, or switch to Worldwide`
+                  : needsIndustry
+                    ? 'Pick an industry, or switch to All industries'
+                    : undefined
+              }
               className="btn btn-primary"
             >
               {isGenerating ? (

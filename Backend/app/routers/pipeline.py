@@ -116,10 +116,12 @@ async def run_pipeline(
     _user: User = Depends(get_current_user),
 ) -> RunPipelineResponse:
     area = payload.location
+    industry = payload.industry
     logger.info(
-        "[Pipeline] Starting for ICP: %s (%s)",
+        "[Pipeline] Starting for ICP: %s (%s, %s)",
         payload.icp,
         area.as_label() if area else "worldwide",
+        industry.as_label() if industry else "all industries",
     )
     run_usage = RunUsage()
 
@@ -129,7 +131,7 @@ async def run_pipeline(
 
     try:
         discovered = await agents.discover_companies(
-            payload.icp, payload.companyCount, payload.location
+            payload.icp, payload.companyCount, payload.location, payload.industry
         )
         run_usage.add(discovered.usage)
 

@@ -186,10 +186,33 @@ class SearchArea(BaseModel):
         return self.value.strip() if self.is_set else "worldwide"
 
 
+IndustryMode = Literal["all", "preset", "custom"]
+
+
+class IndustryFilter(BaseModel):
+    """Which sector to stay inside. Same deal as SearchArea - prompt-side only,
+    so it costs nothing against the structured-output grammar budget.
+
+    `preset` and `custom` behave identically once here; the mode is kept only
+    so the UI can say where the value came from. The value is free text either
+    way, because no fixed taxonomy survives contact with a real ICP."""
+
+    mode: IndustryMode = "all"
+    value: str = Field(default="", max_length=120)
+
+    @property
+    def is_set(self) -> bool:
+        return self.mode != "all" and bool(self.value.strip())
+
+    def as_label(self) -> str:
+        return self.value.strip() if self.is_set else "all industries"
+
+
 class RunPipelineRequest(BaseModel):
     icp: str = Field(min_length=1, description="Ideal Customer Profile description.")
     companyCount: int = Field(default=3, ge=1, le=10)
     location: Optional[SearchArea] = None
+    industry: Optional[IndustryFilter] = None
     crmConfig: Optional[CrmConfig] = None
 
 

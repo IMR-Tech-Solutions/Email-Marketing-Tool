@@ -127,6 +127,14 @@ export interface SearchArea {
   value: string;
 }
 
+/** Which sector Discover should stay inside. `all` ignores `value`. */
+export type IndustryMode = 'all' | 'preset' | 'custom';
+
+export interface IndustryFilter {
+  mode: IndustryMode;
+  value: string;
+}
+
 export interface RunPipelineResponse extends PipelineState {
   success: boolean;
   crmSynced: boolean;

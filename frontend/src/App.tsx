@@ -34,6 +34,7 @@ import {
   ExportScope,
   ContactPatch,
   SearchArea,
+  IndustryFilter,
   CrmConfig,
   Company,
   CrmStage,
@@ -237,14 +238,19 @@ export default function App() {
     }
   }, []);
 
-  const handleRunPipeline = async (icp: string, count: number, location?: SearchArea) => {
+  const handleRunPipeline = async (
+    icp: string,
+    count: number,
+    location?: SearchArea,
+    industry?: IndustryFilter,
+  ) => {
     setPipelineData((prev) => ({ ...prev, isGenerating: true }));
     setError(null);
     setNotice(null);
     setCurrentView('run');
 
     try {
-      const data = await api.runPipeline(icp, count, crmConfig, location);
+      const data = await api.runPipeline(icp, count, crmConfig, location, industry);
 
       setPipelineData({
         companies: data.companies || [],
