@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import { Role } from '../types';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { setToken } from '../lib/auth';
 
 interface LoginViewProps {
-  onSignedIn: (username: string) => void;
+  onSignedIn: (username: string, role: Role) => void;
 }
 
 export function LoginView({ onSignedIn }: LoginViewProps) {
@@ -21,7 +22,7 @@ export function LoginView({ onSignedIn }: LoginViewProps) {
     try {
       const session = await api.login(username, password);
       setToken(session.accessToken);
-      onSignedIn(session.username);
+      onSignedIn(session.username, session.role);
     } catch (err: any) {
       setError(err.message);
       setPassword('');
@@ -39,8 +40,8 @@ export function LoginView({ onSignedIn }: LoginViewProps) {
             style={{
               width: 46,
               height: 46,
-              background: 'linear-gradient(140deg, #6366f1, #4f46e5)',
-              boxShadow: '0 6px 20px rgba(79,70,229,0.35)',
+              background: 'linear-gradient(140deg, #8b5cf6, #6d28d9)',
+              boxShadow: '0 6px 20px rgba(109,40,217,0.30)',
             }}
           >
             S

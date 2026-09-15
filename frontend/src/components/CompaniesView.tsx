@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { BUSINESSES, BUSINESS_LABEL, BusinessFilter } from '../lib/business';
 import {
   Company,
   ContactPatch,
@@ -515,11 +516,16 @@ export function CompaniesView({
   const [openId, setOpenId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState<'reach' | 'research'>('reach');
+  const [business, setBusiness] = useState<BusinessFilter>('all');
 
   const q = query.trim().toLowerCase();
   const visible = companies.filter(
-    (c) => !q || c.name.toLowerCase().includes(q) || c.industry.toLowerCase().includes(q),
+    (c) =>
+      (business === 'all' || c.business === business) &&
+      (!q || c.name.toLowerCase().includes(q) || c.industry.toLowerCase().includes(q)),
   );
+  const countFor = (key: BusinessFilter) =>
+    key === 'all' ? companies.length : companies.filter((c) => c.business === key).length;
   const detail = visible.find((c) => c.id === openId) ?? visible[0] ?? null;
 
   useEffect(() => {
@@ -562,7 +568,25 @@ export function CompaniesView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Two businesses share this list; this is how you look at one. */}
+          <div className="seg" role="tablist" aria-label="Business">
+            {(['all', ...BUSINESSES.map((b) => b.key)] as BusinessFilter[]).map((key) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={business === key}
+                onClick={() => setBusiness(key)}
+                className="seg-btn flex items-center gap-1.5"
+              >
+                {key === 'all' ? 'All' : BUSINESS_LABEL[key]}
+                <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>
+                  {countFor(key)}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <div className="relative">
             <Search
               className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"

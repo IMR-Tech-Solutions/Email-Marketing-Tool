@@ -41,6 +41,15 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # "admin" or "sales". Admins can spend money (Discover, bulk sends),
+    # change configuration (mailboxes, templates, integrations) and manage
+    # accounts. A sales executive can do everything needed to work a lead:
+    # read the pipeline, edit contacts, move deals, send drafted outreach and
+    # answer replies. Enforced by require_admin in auth.py, not by the UI.
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="sales", server_default="sales"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -473,6 +482,61 @@ class Template(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WorkspaceSettings(Base):
+    """The defaults and policies an admin edits from the Settings screen.
+
+    One row, id 1. Seeded from .env the first time anything reads it - the
+    same arrangement the users table has with DASHBOARD_USERNAME - and the
+    source of truth from then on. See workspace_settings.py.
+    """
+
+    __tablename__ = "workspace_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+
+    # Shown under the signed-in name in the top bar.
+    workspace_name: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="Revenue workspace"
+    )
+
+    # What Discover opens with. Every run can still change them.
+    default_company_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    default_geo_scope: Mapped[str] = mapped_column(String(16), nullable=False, default="global")
+    default_geo_value: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    default_industry_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="all")
+    default_industry_value: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+
+    # Qualification and the refresh policy - see freshness.py. These start
+    # as the .env values and override them once saved.
+    high_icp_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=75)
+    refresh_days_high_icp_active: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    refresh_days_high_icp_dormant: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
+    refresh_days_mid_icp: Mapped[int] = mapped_column(Integer, nullable=False, default=180)
+
+    # What Bulk Outreach and the mailbox form open with.
+    default_batch_size: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    default_delay_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    default_daily_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
+
+    # See the note on allow_guessed_emails in config.py before turning it on.
+    allow_guessed_emails: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
+    # A ceiling on the month's Claude spend. 0 means no ceiling.
+    monthly_budget_usd: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
+
+    # One sign-off per business, put on at send time - see signatures.py.
+    signature_tech: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    signature_market_research: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )

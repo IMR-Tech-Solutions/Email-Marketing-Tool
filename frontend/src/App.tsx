@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -27,6 +27,8 @@ import { RetouchView } from './components/RetouchView';
 import { BroadcastView } from './components/BroadcastView';
 import { AgentsView } from './components/AgentsView';
 import { SendCampaignModal } from './components/SendCampaignModal';
+import { TeamView } from './components/TeamView';
+import { ADMIN_VIEWS } from './lib/roles';
 import {
   PipelineData,
   BroadcastState,
@@ -50,9 +52,16 @@ import {
   TemplateListResponse,
   CampaignSendPreview,
   CampaignSendResult,
+  Role,
+  DiscoveryDefaults,
+  WorkspaceSettingsResponse,
+  WorkspaceSettingsValues
 } from './types';
 import { api } from './lib/api';
-import { clearToken, getToken, readPref, writePref } from './lib/auth';
+import { clearToken, getToken, readPref, readPrefString, writePref } from './lib/auth';
+
+/** Which screen a sign-in lands on. Chosen under Settings > Your account. */
+const homeView = () => readPrefString('home-view', 'dashboard');
 
 
 const VIEW_TITLES: Record<string, string> = {
@@ -66,6 +75,7 @@ const VIEW_TITLES: Record<string, string> = {
   compliance: 'Compliance & Suppression',
   crm: 'Integrations',
   settings: 'Settings',
+  team: 'Team',
   inbox: 'Inbox',
   mailboxes: 'Mailboxes',
   templates: 'Templates',
@@ -75,7 +85,7 @@ const VIEW_TITLES: Record<string, string> = {
 };
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState(homeView);
   const [pipelineData, setPipelineData] = useState<PipelineData>({
     companies: [],
     outreachCampaigns: [],
@@ -108,6 +118,21 @@ export default function App() {
   const [sendPreview, setSendPreview] = useState<CampaignSendPreview | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  // Defaults and policies from Settings. What Discover, Bulk Outreach and the
+  // mailbox form open with, and the name under yours in the top bar.
+  const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettingsResponse | null>(null);
+
+  const discoveryDefaults = useMemo<DiscoveryDefaults | undefined>(() => {
+    const s = workspaceSettings?.settings;
+    if (!s) return undefined;
+    return {
+      companyCount: s.defaultCompanyCount,
+      scope: s.defaultGeoScope,
+      value: s.defaultGeoValue,
+      industryMode: s.defaultIndustryMode,
+      industryValue: s.defaultIndustryValue,
+    };
+  }, [workspaceSettings]);
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -115,10 +140,14 @@ export default function App() {
 
   // null = signed out. undefined = still checking the stored token.
   const [username, setUsername] = useState<string | null | undefined>(undefined);
+  // What this login is allowed to reach. Comes with the session; the backend
+  // enforces it on every route regardless of what the UI shows.
+  const [role, setRole] = useState<Role>('sales');
 
   const handleSignOut = () => {
     clearToken();
     setUsername(null);
+    setRole('sales');
     setCurrentView('dashboard');
     setError(null);
     setNotice(null);
@@ -136,6 +165,7 @@ export default function App() {
     setAgentRoster(null);
     setSendPreview(null);
     setSelectedClients([]);
+    setWorkspaceSettings(null);
   };
 
   useEffect(() => {
@@ -149,7 +179,13 @@ export default function App() {
 
     // A stored token may have expired while the tab was closed.
     api.me()
-      .then((session) => setUsername(session.username))
+      .then((session) => {
+        setRole(session.role);
+        setUsername(session.username);
+        // Land where this browser asked to. Set together with the role, so
+        // the admin-only guard below sees the real role, not the default.
+        setCurrentView(homeView());
+      })
       .catch(() => setUsername(null));
   }, []);
 
@@ -180,7 +216,7 @@ export default function App() {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [state, dash, spend, suppressed, box, boxes, tpl, q, rt, ag, preview, blast, sent] =
+      const [state, dash, spend, suppressed, box, boxes, tpl, q, rt, ag, preview, blast, sent, prefs] =
         await Promise.all([
         api.getPipeline(),
         api.getDashboard(),
@@ -195,6 +231,7 @@ export default function App() {
         api.getCampaignPreview(),
         api.getBroadcast(),
         api.getOutbox(),
+        api.getSettings(),
       ]);
       setPipelineData({
         companies: state.companies,
@@ -214,6 +251,7 @@ export default function App() {
       setSendPreview(preview);
       setBroadcast(blast);
       setOutbox(sent);
+      setWorkspaceSettings(prefs);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -224,6 +262,12 @@ export default function App() {
   useEffect(() => {
     if (username) void refresh();
   }, [username, refresh]);
+
+  // A sales login is never left on an admin view - not via the palette, and
+  // not via a view remembered from an admin's earlier session in this tab.
+  useEffect(() => {
+    if (role !== 'admin' && ADMIN_VIEWS.has(currentView)) setCurrentView('dashboard');
+  }, [role, currentView]);
 
   /**
    * Just the bulk-outreach screen. A paced send is polled every few seconds
@@ -337,6 +381,32 @@ export default function App() {
       setError(err.message);
       throw err;
     }
+  };
+
+  // --- Settings ---
+
+  const handleSaveSettings = async (patch: Partial<WorkspaceSettingsValues>) => {
+    const next = await api.updateSettings(patch);
+    setWorkspaceSettings(next);
+    setError(null);
+    setNotice('Settings saved.');
+    // The qualified threshold and refresh policy feed the dashboard, the
+    // queue and the retouch centre, so pull the derived views again.
+    void refresh();
+  };
+
+  const handleResetSettings = async () => {
+    const next = await api.resetSettings();
+    setWorkspaceSettings(next);
+    setError(null);
+    setNotice('Settings are back to the .env defaults.');
+    void refresh();
+  };
+
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    await api.changePassword(currentPassword, newPassword);
+    setError(null);
+    setNotice('Password changed. It applies from your next sign-in on any other device.');
   };
 
   // --- Inbox and mailboxes ---
@@ -480,7 +550,15 @@ export default function App() {
   }
 
   if (username === null) {
-    return <LoginView onSignedIn={setUsername} />;
+    return (
+      <LoginView
+        onSignedIn={(name, signedInRole) => {
+          setRole(signedInRole);
+          setUsername(name);
+          setCurrentView(homeView());
+        }}
+      />
+    );
   }
 
   const handleUploadBroadcast = async (file: File) => {
@@ -559,6 +637,7 @@ export default function App() {
           collapsed={railCollapsed}
           onToggleCollapse={toggleRail}
           onSignOut={handleSignOut}
+          role={role}
         />
 
       <SendCampaignModal
@@ -573,6 +652,7 @@ export default function App() {
 
       <CommandPalette
         open={commandOpen}
+        role={role}
         onClose={() => setCommandOpen(false)}
         onNavigate={setCurrentView}
       />
@@ -581,6 +661,7 @@ export default function App() {
         <TopBar
           title={VIEW_TITLES[currentView] ?? 'Sales OS'}
           username={username}
+          workspaceName={workspaceSettings?.settings.workspaceName}
           claudeReady={health?.claudeConfigured ?? false}
           isBusy={pipelineData.isGenerating}
           alerts={alerts}
@@ -634,6 +715,7 @@ export default function App() {
 
           {currentView === 'run' && (
             <RunAgentsView
+              defaults={discoveryDefaults}
               onRunPipeline={handleRunPipeline}
               isGenerating={pipelineData.isGenerating}
               modelLarge={health?.modelLarge}
@@ -696,6 +778,14 @@ export default function App() {
               onClear={handleClearBroadcast}
               onExport={handleExportBroadcast}
               onRefresh={refreshBroadcast}
+              defaults={
+                workspaceSettings
+                  ? {
+                      batchSize: workspaceSettings.settings.defaultBatchSize,
+                      delaySeconds: workspaceSettings.settings.defaultDelaySeconds,
+                    }
+                  : undefined
+              }
             />
           )}
 
@@ -703,6 +793,11 @@ export default function App() {
             <OutreachView
               companies={pipelineData.companies}
               outreachCampaigns={pipelineData.outreachCampaigns}
+              preview={sendPreview}
+              onSend={(companyId) => {
+                setSelectedClients([companyId]);
+                setSendOpen(true);
+              }}
             />
           )}
 
@@ -735,6 +830,7 @@ export default function App() {
               onTest={handleTestMailbox}
               onUpdate={handleUpdateMailbox}
               onDelete={handleDeleteMailbox}
+              defaultDailyLimit={workspaceSettings?.settings.defaultDailyLimit}
             />
           )}
 
@@ -759,6 +855,10 @@ export default function App() {
 
           {currentView === 'cost' && <CostView data={cost} isLoading={isLoading} />}
 
+          {currentView === 'team' && role === 'admin' && (
+            <TeamView currentUsername={username} />
+          )}
+
           {currentView === 'compliance' && (
             <ComplianceView
               entries={suppression}
@@ -774,7 +874,13 @@ export default function App() {
 
           {currentView === 'settings' && (
             <SystemSettingsView
+              role={role}
+              username={username}
               companyCount={pipelineData.companies.length}
+              data={workspaceSettings}
+              onSave={handleSaveSettings}
+              onReset={handleResetSettings}
+              onChangePassword={handleChangePassword}
               onClearData={handleClearData}
             />
           )}

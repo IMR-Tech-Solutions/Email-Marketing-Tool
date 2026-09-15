@@ -3,74 +3,105 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..600&display=swap");
 
 /*
- * Clean, green, product-SaaS.
+ * Light, airy, violet product-SaaS.
  *
- * A neutral grey page holds one big rounded white shell: white rail on the
- * left with a green active marker, white cards on a faintly tinted workspace.
- * Deep green is the only brand colour; hatching marks anything empty or
+ * A cool grey-lavender page holds one big rounded white shell: white rail on
+ * the left with a violet marker, white cards floating on a faintly tinted
+ * workspace. Violet is the brand; mint, orange, pink and sky are the pastel
+ * accent family that tints icon tiles and chart series. Cards lean on soft
+ * shadow rather than heavy strokes. Hatching still marks anything empty or
  * remaining, which doubles as a non-colour channel on charts.
  */
 :root {
-  --canvas:        #eeeeee;  /* page behind the shell */
+  --canvas:        #f3f4fa;  /* page behind the shell */
   --shell:         #ffffff;  /* the app card          */
   --rail:          #ffffff;  /* sidebar               */
-  --work:          #fbfbfb;  /* workspace behind cards*/
+  --work:          #f7f8fd;  /* workspace behind cards*/
   --surface:       #ffffff;  /* cards                 */
-  --surface-2:     #f7f8f7;  /* inset rows, headers   */
-  --surface-3:     #eef0ee;  /* hovers, tracks        */
+  --surface-2:     #f6f7fc;  /* inset rows, headers   */
+  --surface-3:     #eceef8;  /* hovers, tracks        */
 
-  --border:        #eaeaea;
-  --border-strong: #dcdedc;
+  --border:        #ecedf6;
+  --border-strong: #dee0ee;
 
-  --ink:           #111813;
-  --ink-2:         #3d453f;
-  --ink-3:         #6b736d;
-  --ink-4:         #9aa19c;
+  --ink:           #1c1f35;
+  --ink-2:         #454b6b;
+  --ink-3:         #767c99;
+  --ink-4:         #a3a8c0;
 
-  /* Brand */
-  --green:         #1f7a45;
-  --green-hover:   #176036;
-  --green-deep:    #14532d;
-  --green-mid:     #34a85c;
-  --green-light:   #5fcb8a;
-  --green-soft:    #e9f6ee;
-  --green-border:  #bfe3cd;
-
-  --ink-card:      #101512;  /* the black accent card */
-
-  --good:          #1f7a45;
-  --good-soft:     #e9f6ee;
-  --good-border:   #bfe3cd;
-
-  --warn:          #b8791a;
-  --warn-soft:     #fdf5e7;
-  --warn-border:   #f0dcb4;
-
-  --bad:           #c2402f;
-  --bad-soft:      #fdeeeb;
-  --bad-border:    #f5cdc5;
-
-  --blue:          #3f7ad6;
+  /* Brand — violet */
+  --brand:         #6d28d9;
+  --brand-hover:   #5b21b6;
+  --brand-deep:    #4c1d95;
+  --brand-mid:     #8b5cf6;
+  --brand-light:   #a78bfa;
+  --brand-pale:    #c4b5fd;
+  --brand-soft:    #f2ecfe;
+  --brand-border:  #dcd0fb;
 
   /*
-   * Freshness: an ordinal green ramp, light to dark as records decay.
-   * Validated on white - monotone lightness, every adjacent gap >= 0.06,
-   * light end 2.02:1, hue spread 4 degrees.
+   * Compatibility aliases. The palette used to be green and 21 components
+   * still ask for --green*; they now resolve to the violet scale, so the
+   * whole app moves in one step rather than 21.
    */
-  --fresh-1: #5fcb8a;
-  --fresh-2: #34a85c;
-  --fresh-3: #1f7a45;
-  --fresh-4: #145c33;
-  --fresh-5: #0a3d22;
+  --green:         var(--brand);
+  --green-hover:   var(--brand-hover);
+  --green-deep:    var(--brand-deep);
+  --green-mid:     var(--brand-mid);
+  --green-light:   var(--brand-light);
+  --green-soft:    var(--brand-soft);
+  --green-border:  var(--brand-border);
 
-  /* Categorical trio: green / blue / amber. All checks pass. */
-  --cat-1: #1f7a45;
-  --cat-2: #3f7ad6;
-  --cat-3: #b8791a;
+  /* Pastel accent family — icon tiles, series colours, soft chips. */
+  --mint:          #16c79a;
+  --mint-light:    #4bdcb8;
+  --mint-soft:     #e3f9f2;
+  --mint-border:   #b6ecdd;
 
-  --shadow-sm: 0 1px 2px rgba(17, 24, 19, 0.04);
-  --shadow-md: 0 6px 20px rgba(17, 24, 19, 0.07);
-  --shadow-lg: 0 24px 64px rgba(17, 24, 19, 0.18);
+  --orange:        #f2872f;
+  --orange-soft:   #fef1e5;
+
+  --pink:          #ef5da8;
+  --pink-soft:     #fdeaf3;
+
+  --sky:           #3b82f6;
+  --sky-soft:      #e8f1fe;
+
+  --good:          #0f9d76;
+  --good-soft:     #e3f9f2;
+  --good-border:   #b6ecdd;
+
+  --warn:          #b4711b;
+  --warn-soft:     #fef1e5;
+  --warn-border:   #f6d9b6;
+
+  --bad:           #d64550;
+  --bad-soft:      #fdecee;
+  --bad-border:    #f7c9ce;
+
+  --blue:          #3b82f6;
+
+  /*
+   * Freshness: an ordinal violet ramp, light to dark as records decay.
+   * Monotone lightness, every adjacent gap stays visible, and the darkest
+   * end carries the brand.
+   */
+  --fresh-1: #c4b5fd;
+  --fresh-2: #a78bfa;
+  --fresh-3: #8b5cf6;
+  --fresh-4: #6d28d9;
+  --fresh-5: #4c1d95;
+
+  /* Categorical trio: violet / mint / orange. */
+  --cat-1: #6d28d9;
+  --cat-2: #16c79a;
+  --cat-3: #f2872f;
+
+  --shadow-sm:    0 1px 2px rgba(28, 31, 53, 0.05);
+  --shadow-card:  0 2px 12px rgba(28, 31, 53, 0.05);
+  --shadow-md:    0 10px 34px rgba(28, 31, 53, 0.07);
+  --shadow-lg:    0 24px 64px rgba(28, 31, 53, 0.16);
+  --shadow-brand: 0 10px 26px rgba(109, 40, 217, 0.26);
 
   /*
    * Weight scale. Geist is an interface face, so this uses real UI weights
@@ -82,7 +113,7 @@
   --w-strong: 550;
   --w-small: 550;
 
-  --rail-w: 236px;
+  --rail-w: 244px;
   --rail-w-collapsed: 76px;
 
   color-scheme: light;
@@ -115,7 +146,7 @@ button:disabled {
 }
 
 a {
-  color: var(--green);
+  color: var(--brand);
   text-decoration: none;
 }
 
@@ -124,7 +155,7 @@ a {
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #d6dad7;
+  background: #d7dae9;
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: content-box;
@@ -166,13 +197,13 @@ a {
 
 .card-title {
   font-size: 15px;
-  font-weight: var(--w-strong);
+  font-weight: var(--w-display);
   letter-spacing: -0.018em;
 }
 
 /* The big numbers. Geist has proper tabular figures, so columns line up. */
 .figure {
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum", "cv01";
@@ -201,7 +232,7 @@ a {
 .hatch-green {
   background-image: repeating-linear-gradient(
     45deg,
-    var(--green-border) 0 2px,
+    var(--brand-border) 0 2px,
     transparent 2px 7px
   );
 }
@@ -213,7 +244,8 @@ a {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
 }
 
 .card-head {
@@ -225,41 +257,80 @@ a {
   border-bottom: 1px solid var(--border);
 }
 
-/* The dark accent card from the reference. */
+/*
+ * The violet accent card. One card per screen gets it, and it carries the
+ * figure that matters most.
+ */
+.card-brand,
 .card-dark {
-  background: var(--ink-card);
-  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 52%, #5b21b6 100%);
+  border-radius: 16px;
   color: #fff;
+  box-shadow: var(--shadow-brand);
 }
-/* A touch more weight on a dark ground, where strokes read thinner. */
+/* A touch more weight on a violet ground, where strokes read thinner. */
+.card-brand .figure,
 .card-dark .figure {
-  font-weight: 620;
+  font-weight: 680;
 }
 
-/* Circular ghost button that sits in a stat card's corner. */
+/*
+ * Pastel icon tile: a round wash of accent colour behind a line icon. It is
+ * the left half of every stat card.
+ */
+.icon-tile {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  flex: none;
+}
+.tile-violet { background: var(--brand-soft);  color: var(--brand); }
+.tile-sky    { background: var(--sky-soft);    color: var(--sky); }
+.tile-orange { background: var(--orange-soft); color: var(--orange); }
+.tile-pink   { background: var(--pink-soft);   color: var(--pink); }
+.tile-mint   { background: var(--mint-soft);   color: var(--mint); }
+
+/* Ghost button in a card corner, carrying the "..." affordance. */
 .corner-btn {
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  border: 1px solid var(--border-strong);
+  border: none;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-4);
   transition: background 0.14s ease, color 0.14s ease;
   flex: none;
 }
 .corner-btn:hover {
   background: var(--surface-3);
-  color: var(--ink);
+  color: var(--ink-2);
 }
 .corner-btn-on-dark {
-  border-color: rgba(255, 255, 255, 0.28);
-  color: #fff;
+  color: rgba(255, 255, 255, 0.75);
 }
 .corner-btn-on-dark:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.16);
   color: #fff;
+}
+
+/* The dark tooltip badge that labels one point on a chart. */
+.tip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------------------------ *
@@ -279,11 +350,15 @@ a {
   color: var(--ink-3);
   white-space: nowrap;
 }
-.pill-brand,
+.pill-brand {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-color: var(--brand-border);
+}
 .pill-good {
-  color: var(--green);
-  background: var(--green-soft);
-  border-color: var(--green-border);
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: var(--good-border);
 }
 .pill-warn {
   color: var(--warn);
@@ -303,13 +378,13 @@ a {
   gap: 8px;
   height: 40px;
   padding: 0 18px;
-  border-radius: 999px;
+  border-radius: 12px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--ink-2);
   font-size: 13.5px;
   font-weight: var(--w-strong);
-  transition: background 0.14s ease, border-color 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 .btn:hover:not(:disabled) {
   background: var(--surface-3);
@@ -320,16 +395,17 @@ a {
 
 .btn-primary {
   border-color: transparent;
-  background: var(--green);
+  background: var(--brand);
   color: #fff;
+  box-shadow: var(--shadow-brand);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--green-hover);
+  background: var(--brand-hover);
 }
 
 .btn-dark {
   border-color: transparent;
-  background: var(--ink-card);
+  background: var(--ink);
   color: #fff;
 }
 
@@ -342,6 +418,7 @@ a {
 .btn-sm {
   height: 32px;
   padding: 0 13px;
+  border-radius: 10px;
   font-size: 12.5px;
 }
 
@@ -349,6 +426,7 @@ a {
   border-color: transparent;
   background: transparent;
   color: var(--ink-3);
+  box-shadow: none;
 }
 .btn-ghost:hover:not(:disabled) {
   background: var(--surface-3);
@@ -368,8 +446,8 @@ a {
   transition: border-color 0.14s ease, box-shadow 0.14s ease;
 }
 .field:focus {
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px var(--green-soft);
+  border-color: var(--brand-light);
+  box-shadow: 0 0 0 3px var(--brand-soft);
 }
 .field::placeholder {
   color: var(--ink-4);
@@ -410,7 +488,7 @@ a {
 }
 .seg-btn[aria-selected="true"] {
   background: var(--surface);
-  color: var(--ink);
+  color: var(--brand);
   box-shadow: var(--shadow-sm);
 }
 
@@ -428,7 +506,7 @@ a {
   color: var(--ink-3);
 }
 .meta a {
-  color: var(--green);
+  color: var(--brand);
   font-weight: var(--w-strong);
 }
 

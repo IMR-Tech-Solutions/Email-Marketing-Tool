@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, CornerDownLeft } from 'lucide-react';
+import { Role } from '../types';
+import { canView } from '../lib/roles';
 
 interface CommandPaletteProps {
   open: boolean;
+  role: Role;
   onClose: () => void;
   onNavigate: (view: string) => void;
 }
@@ -23,21 +26,23 @@ const DESTINATIONS = [
   { id: 'cost', label: 'Cost', group: 'System', hint: 'Spend per agent and model routing' },
   { id: 'compliance', label: 'Compliance', group: 'System', hint: 'Do-not-contact list' },
   { id: 'crm', label: 'Integrations', group: 'System', hint: 'CRM connection' },
-  { id: 'settings', label: 'Settings', group: 'System', hint: 'Stored data and accounts' },
+  { id: 'settings', label: 'Settings', group: 'System', hint: 'Workspace defaults, sending, spend and your account' },
+  { id: 'team', label: 'Team', group: 'System', hint: 'Logins and roles' },
 ];
 
-export function CommandPalette({ open, onClose, onNavigate }: CommandPaletteProps) {
+export function CommandPalette({ open, role, onClose, onNavigate }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const matches = useMemo(() => {
+    const reachable = DESTINATIONS.filter((d) => canView(role, d.id));
     const q = query.trim().toLowerCase();
-    if (!q) return DESTINATIONS;
-    return DESTINATIONS.filter(
+    if (!q) return reachable;
+    return reachable.filter(
       (d) => d.label.toLowerCase().includes(q) || d.hint.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [query, role]);
 
   useEffect(() => {
     if (open) {

@@ -27,6 +27,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from collections.abc import Mapping
 from typing import Iterable, Sequence
 
 from sqlalchemy import func, select
@@ -35,6 +36,7 @@ from .config import Settings
 from .crypto import DecryptionError
 from .db import get_sessionmaker
 from .email_service import MailboxError, send_message
+from .signatures import Business
 from .models import (
     BroadcastJob,
     BroadcastRecipient,
@@ -78,37 +80,38 @@ class Brand:
 
 
 # The first angle for each brand is the sender's own copy, used verbatim apart
-# from three changes: [First Name] became {{first_name}}, the [Phone]/[Email]/
-# [Website] placeholders were filled from each site, and a one-line opt-out was
-# added at the end. That last line is not decoration - the reply-triage agent
-# auto-suppresses anyone who answers "unsubscribe", so inviting it is what
-# keeps the do-not-contact list filling honestly rather than through
-# complaints. Delete it if you would rather not have it; nothing else depends
-# on it being there.
+# from two changes: [First Name] became {{first_name}}, and the sign-off came
+# out. The signature goes back on when the brands are served - see `signoff`
+# below - so it is the one the admin saved in Settings, not a copy frozen in
+# here, and a one-line opt-out is added under it. That last line is not
+# decoration - the reply-triage agent auto-suppresses anyone who answers
+# "unsubscribe", so inviting it is what keeps the do-not-contact list filling
+# honestly rather than through complaints. Delete it if you would rather not
+# have it; nothing else depends on it being there.
 #
 # The shorter angles below each default exist because the rotation comes back
 # around: sending somebody the identical message on round two is what gets a
 # sending domain reported.
 
-_SIGNOFF_TECH = (
-    "\n\nBest regards,\n"
-    "Akshay V. Patil\n"
-    "Director\n"
-    "IMR Tech Solutions\n"
-    "+91 91753-37569 | contact@imrtechsolutions.com\n"
-    "https://imrtechsolutions.com\n\n"
-    'If this isn’t relevant, reply "unsubscribe" and I won’t write again.'
-)
+OPT_OUT_LINE = 'If this isn’t relevant, reply "unsubscribe" and I won’t write again.'
 
-_SIGNOFF_RESEARCH = (
-    "\n\nBest regards,\n"
-    "Akshay V. Patil\n"
-    "Business Development Head\n"
-    "Introspective Market Research Pvt. Ltd.\n"
-    "+91-74101-03736 | sales@introspectivemarketresearch.com\n"
-    "https://introspectivemarketresearch.com\n\n"
-    'If this isn’t relevant, reply "unsubscribe" and I won’t write again.'
-)
+# Which business signs each brand's mail. Keys are the BRANDS keys below.
+BRAND_BUSINESS: dict[str, Business] = {
+    "imr_tech": "tech",
+    "imr_research": "market_research",
+}
+
+
+def signoff(brand_key: str, signatures: Mapping[Business, str]) -> str:
+    """What goes under a template body: the saved signature, then the opt-out.
+
+    A blank signature is allowed - the opt-out line still goes on, because
+    the reply-triage agent depends on it being invited.
+    """
+    signature = (signatures.get(BRAND_BUSINESS.get(brand_key, "tech")) or "").strip()
+    parts = [signature] if signature else []
+    parts.append(OPT_OUT_LINE)
+    return "\n\n" + "\n\n".join(parts)
 
 BRANDS: dict[str, Brand] = {
     "imr_tech": Brand(
@@ -144,7 +147,6 @@ BRANDS: dict[str, Brand] = {
                     "inefficiencies, I’d be happy to understand the challenge "
                     "and suggest a practical technology approach.\n\n"
                     "Would you be open to a 15-minute discussion next week?"
-                    + _SIGNOFF_TECH
                 ),
             ),
             MessageTemplate(
@@ -167,7 +169,6 @@ BRANDS: dict[str, Brand] = {
                     "glad to walk you through two or three we have built for "
                     "teams your size.\n\n"
                     "Would you be open to a 15-minute discussion next week?"
-                    + _SIGNOFF_TECH
                 ),
             ),
             MessageTemplate(
@@ -188,7 +189,6 @@ BRANDS: dict[str, Brand] = {
                     "and I’ll tell you honestly whether it is worth automating. "
                     "That answer is free either way.\n\n"
                     "Would you be open to a 15-minute discussion next week?"
-                    + _SIGNOFF_TECH
                 ),
             ),
         ),
@@ -234,7 +234,6 @@ BRANDS: dict[str, Brand] = {
                     "product research or market opportunity assessment, I’d be "
                     "happy to discuss how we can support you.\n\n"
                     "Would you be open to a 15-minute discussion next week?"
-                    + _SIGNOFF_RESEARCH
                 ),
             ),
             MessageTemplate(
@@ -256,7 +255,6 @@ BRANDS: dict[str, Brand] = {
                     "channels keep answering ambiguously, that is usually the "
                     "one worth handing to someone outside.\n\n"
                     "Would you be open to a 15-minute discussion next week?"
-                    + _SIGNOFF_RESEARCH
                 ),
             ),
             MessageTemplate(
@@ -279,7 +277,6 @@ BRANDS: dict[str, Brand] = {
                     "that nobody can currently defend, I am happy to scope what "
                     "it would take to get it properly.\n\n"
                     "Would you be open to a 15-minute discussion next week?"
-                    + _SIGNOFF_RESEARCH
                 ),
             ),
         ),

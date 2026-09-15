@@ -129,6 +129,7 @@ honest answer rather than a confident-looking one.
 | | Cost | Spend per agent, model routing, refresh policy |
 | | Compliance | Do-not-contact list |
 | | Integrations | Salesforce / HubSpot config (simulated) |
+| | Settings | What Discover and Bulk Outreach open with, the qualified ICP score and refresh policy, guessed-address policy, the two email signatures, a monthly AI budget, your password, and the stored-data controls |
 
 Interactive API docs while the backend runs: http://127.0.0.1:8000/docs
 

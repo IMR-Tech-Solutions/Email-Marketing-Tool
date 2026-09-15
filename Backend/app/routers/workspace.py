@@ -12,12 +12,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import freshness, repository
-from ..auth import get_current_user
-from ..config import Settings, get_settings
+from ..auth import get_current_user, require_admin
+from ..config import Settings
 from ..db import get_session
 from ..dependencies import get_agents
 from ..models import Company, EmailMessage, ModelCall, Template, User
 from ..pricing import call_cost
+from ..workspace_settings import get_runtime_settings
 from ..schemas import (
     AgentsResponse,
     AgentStatus,
@@ -89,7 +90,7 @@ async def list_templates(
 async def create_template(
     payload: TemplateIn,
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> TemplateOut:
     unknown = {
         v
@@ -126,7 +127,7 @@ async def update_template(
     template_id: str,
     payload: TemplateIn,
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> TemplateOut:
     try:
         parsed = uuid.UUID(template_id)
@@ -149,7 +150,7 @@ async def update_template(
 async def delete_template(
     template_id: str,
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> None:
     try:
         parsed = uuid.UUID(template_id)
@@ -171,7 +172,7 @@ async def delete_template(
 @router.get("/priority-queue", response_model=PriorityQueueResponse)
 async def priority_queue(
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> PriorityQueueResponse:
     """Who deserves attention now, and why.
@@ -289,7 +290,7 @@ async def priority_queue(
 @router.get("/retouch", response_model=RetouchResponse)
 async def retouch(
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> RetouchResponse:
     """The decayed-record queue, priced before you approve anything."""

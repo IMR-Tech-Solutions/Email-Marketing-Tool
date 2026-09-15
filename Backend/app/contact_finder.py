@@ -7,6 +7,9 @@ from here instead, and every one arrives with its provenance attached:
 
   hunter     looked up in a maintained contact database, with that database's
              own confidence score and verification status.
+  website    published by the company on its own site - a mailto: link or an
+             address printed on the contact page. Not a guess at all: the
+             company put it there to be written to.
   pattern    derived from the company domain and the person's name. This is a
              GUESS about the shape of their addressing scheme, and it is only
              worth anything once the mail server has confirmed it.
@@ -26,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 import string
 from dataclasses import dataclass
 from typing import Literal
@@ -61,6 +65,135 @@ PATTERNS: tuple[tuple[str, int], ...] = (
     ("{first}{l}", 20),
 )
 
+# The pages a company puts its address on, best first. The legal pages at the
+# end look like an odd place to look and are among the most reliable: a
+# privacy policy has to give a real way to reach the company, so a site that
+# hides everything else behind a contact form still prints one there.
+CONTACT_PAGES: tuple[str, ...] = (
+    "",
+    "/contact",
+    "/contact-us",
+    "/contact-us/",
+    "/contactus",
+    "/about",
+    "/about-us",
+    "/get-in-touch",
+    "/privacy-policy",
+    "/privacy",
+    "/terms",
+    "/legal",
+)
+
+# Enough to find an address without hammering a stranger's web server.
+MAX_SCRAPE_REQUESTS = 10
+
+# Stop sweeping once something this good has turned up - a named address or a
+# front-door role mailbox. Below it, keep looking for something better.
+GOOD_ENOUGH_SCORE = 70
+
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+# Published, but not a person and not a way in. Mailing these is either
+# useless or actively counterproductive.
+BLOCKED_MAILBOXES = frozenset(
+    {
+        "noreply", "no-reply", "donotreply", "do-not-reply", "postmaster",
+        "abuse", "unsubscribe", "privacy", "dpo", "legal", "webmaster",
+        "hostmaster", "security", "press", "media", "billing", "accounts",
+        "invoices", "support", "helpdesk", "servicedesk", "it", "compliance",
+        "gdpr", "feedback", "complaints", "newsletter", "subscriptions",
+        # Recruiting inboxes, every spelling of them. A sales email to the
+        # people who read these goes in the bin, if it is read at all.
+        "careers", "career", "jobs", "job", "recruitment", "recruiting",
+        "recruit", "hr", "humanresources", "human-resources", "human_resources",
+        "talent", "hiring", "apply", "applications", "resume", "resumes", "cv",
+    }
+)
+
+# Fragments that mark a mailbox as one of the above even with a prefix or
+# suffix attached - hr-team@, uk.careers@, jobs2024@.
+BLOCKED_FRAGMENTS: tuple[str, ...] = (
+    "noreply", "donotreply", "recruit", "career", "humanresource", "talent",
+    "hiring", "resume", "privacy", "unsubscribe", "helpdesk", "newsletter",
+)
+
+# A company publishes these so that strangers can start a conversation, which
+# is exactly what outreach is. Ranked by how likely a reply is to reach a
+# person who can buy something.
+ROLE_MAILBOX_SCORES: dict[str, int] = {
+    "sales": 78,
+    "enquiries": 74,
+    "inquiries": 74,
+    "hello": 72,
+    "contact": 72,
+    "info": 70,
+    "business": 70,
+    "marketing": 64,
+    "admin": 58,
+    "office": 58,
+}
+
+# Scraping is a courtesy call on a stranger's web server: few pages, short
+# timeout, and it identifies itself.
+SCRAPE_TIMEOUT_SECONDS = 10.0
+SCRAPE_USER_AGENT = "Mozilla/5.0 (compatible; SalesOS-ContactFinder/1.0)"
+
+
+def _mailbox(address: str) -> str:
+    return address.split("@", 1)[0].lower()
+
+
+def score_published(address: str, first: str, last: str) -> int | None:
+    """How good a published address is for outreach. None means do not use it.
+
+    An address carrying the person's own name beats a shared inbox, and a
+    shared inbox meant for enquiries beats one meant for invoices. Anything
+    that cannot lead to a conversation is dropped rather than ranked.
+    """
+    box = _mailbox(address)
+    stripped = re.sub(r"[._\-]", "", box)
+
+    if box in BLOCKED_MAILBOXES or stripped in BLOCKED_MAILBOXES:
+        return None
+    # hr-team@, uk.careers@, jobs_2024@: any part of the mailbox that is a
+    # blocked word on its own blocks the whole thing.
+    if any(part in BLOCKED_MAILBOXES for part in re.split(r"[._\-]+", box) if part):
+        return None
+    if any(fragment in stripped for fragment in BLOCKED_FRAGMENTS):
+        return None
+
+    # The contact themselves, published by their own employer.
+    if first and first in stripped and (not last or last in stripped):
+        return 92
+    if last and last in stripped:
+        return 84
+
+    if box in ROLE_MAILBOX_SCORES:
+        return ROLE_MAILBOX_SCORES[box]
+
+    # Somebody else's named address on the contact page. Still a real human
+    # at the right company, which beats every guess.
+    return 60
+
+
+def extract_emails(html: str, domain: str) -> list[str]:
+    """On-domain addresses printed anywhere in the page, deduplicated."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for hit in EMAIL_RE.findall(html or ""):
+        address = hit.lower().strip(".")
+        if address.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp")):
+            continue
+        host = address.split("@", 1)[1]
+        if host != domain and not host.endswith("." + domain):
+            continue
+        if address in seen:
+            continue
+        seen.add(address)
+        out.append(address)
+    return out
+
+
 # A probe has to identify itself as coming from somewhere deliverable, or a
 # lot of servers will refuse to answer. Overridden with a real mailbox address
 # when the workspace has one connected.
@@ -77,7 +210,7 @@ class EmailCandidate:
     """One possible address, and everything known about how good it is."""
 
     email: str
-    source: Literal["hunter", "pattern"]
+    source: Literal["hunter", "website", "pattern"]
     confidence: int
     status: VerifyStatus
     detail: str = ""
@@ -114,9 +247,44 @@ def _slug(value: str) -> str:
     return "".join(ch for ch in value.lower() if ch in string.ascii_lowercase)
 
 
+# Titles the discovery agent routinely writes into a name, and letters people
+# put after theirs. Neither is part of anybody's address: left in, "Dr. Amruta
+# Deshpande" is looked up as dr.deshpande@ - a guess that is wrong on every
+# domain in the world, which is worse than not guessing at all.
+HONORIFICS = frozenset(
+    {
+        "dr", "drs", "mr", "mrs", "ms", "miss", "mx", "prof", "professor",
+        "sir", "madam", "shri", "shree", "sri", "smt", "rev", "fr", "capt",
+        "col", "maj", "lt", "gen", "eng", "er", "ca", "adv", "hon",
+    }
+)
+
+SUFFIXES = frozenset(
+    {
+        "jr", "sr", "ii", "iii", "iv", "phd", "md", "mbbs", "ms", "msc",
+        "mba", "cpa", "cfa", "esq", "pe", "bds", "mds", "dds", "do", "rn",
+    }
+)
+
+
 def split_name(full_name: str) -> tuple[str, str]:
-    """Best-effort first/last split. Middle names go to neither."""
+    """Best-effort first/last split. Middle names go to neither.
+
+    Titles and post-nominals come off first. The research agent writes them
+    into names often enough - "Dr." on every clinician it finds - that leaving
+    them in poisons every pattern guess for that contact.
+    """
     parts = [p for p in full_name.replace(".", " ").split() if p]
+
+    trimmed = list(parts)
+    while trimmed and _slug(trimmed[0]) in HONORIFICS:
+        trimmed.pop(0)
+    while trimmed and _slug(trimmed[-1]) in SUFFIXES:
+        trimmed.pop()
+
+    # A name that was nothing but titles is better searched as written.
+    parts = trimmed or parts
+
     if not parts:
         return "", ""
     if len(parts) == 1:
@@ -152,6 +320,28 @@ def pattern_candidates(first: str, last: str, domain: str) -> list[EmailCandidat
             )
         )
     return out
+
+
+async def domain_resolves(domain: str) -> bool:
+    """Does this domain exist on the internet at all?
+
+    An A record or an MX record will do - plenty of real companies park their
+    site on one host and their mail on another, and either is proof the domain
+    was registered by somebody. Nothing here proves the domain belongs to the
+    company that claimed it; it only rules out the one that does not exist.
+
+    Cheap, deterministic and free: a DNS lookup, no model and no API.
+    """
+    domain = normalise_domain(domain)
+    if not domain:
+        return False
+    for record in ("A", "MX"):
+        try:
+            await dns.asyncresolver.resolve(domain, record)
+            return True
+        except (dns.exception.DNSException, ValueError):
+            continue
+    return False
 
 
 class ContactFinder:
@@ -217,6 +407,88 @@ class ContactFinder:
         )
 
     # ------------------------------------------------------------------
+    # The company's own website
+    # ------------------------------------------------------------------
+
+    async def _from_website(
+        self, first: str, last: str, domain: str
+    ) -> list[EmailCandidate]:
+        """Addresses the company publishes on its own site.
+
+        This is the source that works when nothing else does: no API key, no
+        port 25, and no guessing. A company that prints sales@ on its homepage
+        has said in public where to write to it.
+        """
+        found: dict[str, str] = {}
+        headers = {"User-Agent": SCRAPE_USER_AGENT}
+        host = domain
+        requests = 0
+
+        try:
+            async with httpx.AsyncClient(
+                headers=headers,
+                timeout=SCRAPE_TIMEOUT_SECONDS,
+                follow_redirects=True,
+            ) as client:
+                for path in CONTACT_PAGES:
+                    if requests >= MAX_SCRAPE_REQUESTS:
+                        break
+                    try:
+                        response = await client.get(f"https://{host}{path}")
+                        requests += 1
+                    except httpx.HTTPError:
+                        # Some domains only answer on www. Try it once, on the
+                        # first failure, then carry on with whichever works.
+                        if host == domain:
+                            host = f"www.{domain}"
+                            try:
+                                response = await client.get(f"https://{host}{path}")
+                                requests += 1
+                            except httpx.HTTPError:
+                                host = domain
+                                continue
+                        else:
+                            continue
+                    if response.status_code >= 400:
+                        continue
+                    for address in extract_emails(response.text, domain):
+                        found.setdefault(address, path or "/")
+
+                    # Keep sweeping until something worth sending to turns up -
+                    # a page that yields only privacy@ has not answered the
+                    # question, even though it did return an address.
+                    best = max(
+                        (score_published(a, first, last) or 0 for a in found),
+                        default=0,
+                    )
+                    if best >= GOOD_ENOUGH_SCORE:
+                        break
+        except Exception as exc:  # noqa: BLE001 - a site being odd is not news
+            logger.info("[Website] %s unreadable: %s", domain, type(exc).__name__)
+            return []
+
+        candidates: list[EmailCandidate] = []
+        for address, path in found.items():
+            score = score_published(address, first, last)
+            if score is None:
+                continue
+            candidates.append(
+                EmailCandidate(
+                    email=address,
+                    source="website",
+                    confidence=score,
+                    status="unverified",
+                    detail=f"Published by {domain} on {path}",
+                )
+            )
+        candidates.sort(key=lambda c: -c.confidence)
+        if candidates:
+            logger.info(
+                "[Website] %s published %d usable address(es)", domain, len(candidates)
+            )
+        return candidates
+
+    # ------------------------------------------------------------------
     # The mail server
     # ------------------------------------------------------------------
 
@@ -264,6 +536,50 @@ class ContactFinder:
                 pass
         return results
 
+    async def find_published(
+        self, *, full_name: str, domain: str
+    ) -> list[EmailCandidate]:
+        """Sourced addresses only: published on the site, or found in Hunter.
+
+        No pattern guesses, and no mail-server probe. This is the path used
+        when an address may be saved without anyone looking at it first, so
+        everything it returns has to have come from somewhere - a template
+        filled in with a surname has not.
+        """
+        domain = normalise_domain(domain)
+        first, last = split_name(full_name)
+        if not domain or not first:
+            return []
+
+        candidates: list[EmailCandidate] = []
+        if self.hunter_configured:
+            try:
+                hit = await self._hunter(first, last, domain)
+            except FinderError as exc:
+                logger.warning("[Hunter] %s", exc)
+                hit = None
+            if hit is not None:
+                candidates.append(hit)
+
+        known = {c.email for c in candidates}
+        candidates += [
+            c for c in await self._from_website(first, last, domain)
+            if c.email not in known
+        ]
+        candidates.sort(key=lambda c: -c.confidence)
+        return candidates
+
+    def best_guess(self, *, full_name: str, domain: str) -> EmailCandidate | None:
+        """The single most likely pattern address. A guess, and labelled one.
+
+        Nothing about this is evidence - it is the most common corporate
+        addressing scheme applied to a name. Only ever used where the caller
+        has explicitly accepted the bounce risk.
+        """
+        first, last = split_name(full_name)
+        candidates = pattern_candidates(first, last, normalise_domain(domain))
+        return candidates[0] if candidates else None
+
     # ------------------------------------------------------------------
     # The whole lookup
     # ------------------------------------------------------------------
@@ -296,6 +612,12 @@ class ContactFinder:
                 "Hunter is not configured, so these are pattern guesses only. "
                 "Add HUNTER_API_KEY to Backend/.env for looked-up addresses."
             )
+
+        published = await self._from_website(first, last, domain)
+        known = {c.email for c in candidates}
+        candidates += [c for c in published if c.email not in known]
+        if not published:
+            notes.append(f"{domain} publishes no usable address on its own site.")
 
         known = {c.email for c in candidates}
         candidates += [
@@ -337,6 +659,10 @@ class ContactFinder:
 
         for c in candidates:
             verdict = verdicts.get(c.email)
+            if c.source == "website":
+                # Already evidence: the company printed it. The mail server
+                # cannot add to that, and on a catch-all it cannot subtract.
+                continue
             if not reachable:
                 c.status = "unverified"
             elif catch_all:

@@ -78,6 +78,7 @@ def create_access_token(user: User, settings: Settings) -> tuple[str, int]:
         {
             "sub": str(user.id),
             "username": user.username,
+            "role": user.role,
             "iat": now,
             "exp": now + timedelta(seconds=expires_in),
         },
@@ -121,10 +122,54 @@ async def get_current_user(
     return user
 
 
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    """The guard on everything that spends money, changes configuration or
+    manages accounts. A sales executive gets a clear refusal, not a 401."""
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an admin can do this.",
+        )
+    return user
+
+
+async def _ensure_an_admin(session: AsyncSession, settings: Settings) -> None:
+    """Accounts that predate roles were all admins in practice.
+
+    The role column arrives with a default of 'sales', which on an existing
+    database would silently lock the only login out of everything it could do
+    yesterday. So: if nobody is an admin, the seeded account becomes one - or
+    every existing account does, if the seeded name is not among them.
+    """
+    admins = await session.scalar(
+        select(func.count()).select_from(User).where(User.role == "admin")
+    )
+    if admins:
+        return
+
+    seeded = None
+    if settings.dashboard_username:
+        seeded = await get_user_by_username(session, settings.dashboard_username)
+    targets = [seeded] if seeded else list((await session.execute(select(User))).scalars().all())
+    for user in targets:
+        user.role = "admin"
+    await session.commit()
+    logger.info(
+        "Promoted %d pre-existing account(s) to admin: %s",
+        len(targets),
+        ", ".join(u.username for u in targets),
+    )
+
+
 async def seed_initial_user(session: AsyncSession, settings: Settings) -> None:
-    """Create the first account from .env, only while the table is empty."""
+    """Create the first account from .env, only while the table is empty.
+
+    The first account is an admin - it has to be, or nobody could create the
+    second one.
+    """
     existing = await session.scalar(select(func.count()).select_from(User))
     if existing:
+        await _ensure_an_admin(session, settings)
         return
 
     if not settings.seed_login_configured:
@@ -139,6 +184,7 @@ async def seed_initial_user(session: AsyncSession, settings: Settings) -> None:
         User(
             username=settings.dashboard_username.strip(),
             password_hash=hash_password(settings.dashboard_password),
+            role="admin",
         )
     )
     await session.commit()

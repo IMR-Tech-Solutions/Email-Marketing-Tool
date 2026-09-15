@@ -52,3 +52,20 @@ export function writePref(key: string, value: boolean): void {
     /* Non-fatal: the preference just will not survive a refresh. */
   }
 }
+
+/** The same, for a short string preference such as which screen opens first. */
+export function readPrefString(key: string, fallback: string): string {
+  try {
+    return window.localStorage.getItem(`salesos.${key}`) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function writePrefString(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(`salesos.${key}`, value);
+  } catch {
+    /* Non-fatal: the preference just will not survive a refresh. */
+  }
+}

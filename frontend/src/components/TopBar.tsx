@@ -4,6 +4,8 @@ import { Search, Bell, Mail } from 'lucide-react';
 interface TopBarProps {
   title: string;
   username: string;
+  /** From Settings. Falls back to the original label until it loads. */
+  workspaceName?: string;
   claudeReady: boolean;
   isBusy: boolean;
   alerts: number;
@@ -12,9 +14,35 @@ interface TopBarProps {
   onNavigate: (view: string) => void;
 }
 
+/** Round, borderless icon button - the notification affordance. */
+function IconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="relative grid place-items-center transition-colors"
+      title={label}
+      aria-label={label}
+      style={{ width: 40, height: 40, borderRadius: 999, color: 'var(--ink-3)' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-2)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function TopBar({
   title,
   username,
+  workspaceName,
   claudeReady,
   isBusy,
   alerts,
@@ -31,25 +59,33 @@ export function TopBar({
   return (
     <header
       className="flex items-center gap-3 shrink-0"
-      style={{ padding: '14px 24px', borderBottom: '1px solid var(--border)', background: 'var(--shell)' }}
+      style={{ padding: '13px 24px', borderBottom: '1px solid var(--border)', background: 'var(--shell)' }}
     >
-      {/* Search / command */}
+      {/* Search / command - open field, no chrome until you touch it */}
       <button
         onClick={onOpenCommand}
-        className="flex items-center gap-2.5"
+        className="flex items-center gap-3 transition-colors"
         style={{
-          height: 40,
-          padding: '0 16px',
-          borderRadius: 999,
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
+          height: 42,
+          padding: '0 14px',
+          borderRadius: 12,
+          background: 'transparent',
+          border: '1px solid transparent',
           color: 'var(--ink-4)',
-          width: 300,
+          width: 340,
           maxWidth: '38vw',
         }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--surface-2)';
+          e.currentTarget.style.borderColor = 'var(--border)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.borderColor = 'transparent';
+        }}
       >
-        <Search className="w-4 h-4 shrink-0" strokeWidth={2.2} />
-        <span style={{ fontSize: 13.5 }} className="truncate">
+        <Search className="w-[18px] h-[18px] shrink-0" strokeWidth={2.2} />
+        <span style={{ fontSize: 14 }} className="truncate">
           Search…
         </span>
         <span
@@ -58,7 +94,7 @@ export function TopBar({
             fontSize: 10.5,
             padding: '2px 6px',
             borderRadius: 6,
-            background: 'var(--surface)',
+            background: 'var(--surface-2)',
             border: '1px solid var(--border)',
           }}
         >
@@ -68,11 +104,11 @@ export function TopBar({
 
       <span className="sr-only">{title}</span>
 
-      <div className="ml-auto flex items-center gap-2.5">
+      <div className="ml-auto flex items-center gap-1.5">
         <span
-          className="hidden lg:inline-flex items-center gap-2"
+          className="hidden lg:inline-flex items-center gap-2 mr-1.5"
           style={{
-            height: 32,
+            height: 30,
             padding: '0 12px',
             borderRadius: 999,
             background: status.bg,
@@ -94,42 +130,18 @@ export function TopBar({
           {status.text}
         </span>
 
-        <button
-          onClick={() => onNavigate('inbox')}
-          className="relative grid place-items-center"
-          title="Inbox"
-          aria-label="Inbox"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 999,
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          <Mail className="w-4 h-4" strokeWidth={2.1} style={{ color: 'var(--ink-2)' }} />
+        <IconButton label="Inbox" onClick={() => onNavigate('inbox')}>
+          <Mail className="w-[19px] h-[19px]" strokeWidth={2} />
           {unread > 0 && (
             <span
               className="absolute rounded-full"
-              style={{ top: 9, right: 9, width: 8, height: 8, background: 'var(--green)', border: '1.5px solid #fff' }}
+              style={{ top: 8, right: 8, width: 8, height: 8, background: 'var(--brand)', border: '2px solid #fff' }}
             />
           )}
-        </button>
+        </IconButton>
 
-        <button
-          onClick={() => onNavigate('queue')}
-          className="relative grid place-items-center"
-          title="What needs you"
-          aria-label="What needs you"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 999,
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          <Bell className="w-4 h-4" strokeWidth={2.1} style={{ color: 'var(--ink-2)' }} />
+        <IconButton label="What needs you" onClick={() => onNavigate('queue')}>
+          <Bell className="w-[19px] h-[19px]" strokeWidth={2} />
           {alerts > 0 && (
             <span
               className="absolute grid place-items-center rounded-full text-white"
@@ -141,25 +153,31 @@ export function TopBar({
                 padding: '0 4px',
                 fontSize: 10,
                 fontWeight: 650,
-                background: 'var(--green)',
-                border: '1.5px solid #fff',
+                background: 'var(--brand)',
+                border: '2px solid #fff',
               }}
             >
               {alerts}
             </span>
           )}
-        </button>
+        </IconButton>
 
-        <div className="flex items-center gap-2.5 pl-1.5">
+        <div className="flex items-center gap-2.5 pl-2.5 ml-1" style={{ borderLeft: '1px solid var(--border)' }}>
           <div
             className="grid place-items-center rounded-full text-white shrink-0"
-            style={{ width: 36, height: 36, background: 'var(--green)', fontSize: 13, fontWeight: 550 }}
+            style={{
+              width: 38,
+              height: 38,
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+              fontSize: 13,
+              fontWeight: 650,
+            }}
           >
             {username.slice(0, 2).toUpperCase()}
           </div>
           <div className="hidden sm:block leading-tight">
-            <div style={{ fontSize: 13, fontWeight: 550 }}>{username}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>Revenue workspace</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600 }}>{username}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>{workspaceName || 'Revenue workspace'}</div>
           </div>
         </div>
       </div>

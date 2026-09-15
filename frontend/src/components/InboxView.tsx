@@ -1,6 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { EmailThread, InboxResponse, Mailbox, ReplyClass } from '../types';
-import { RefreshCw, Loader2, Send, Inbox as InboxIcon, AlertTriangle, CornerUpLeft } from 'lucide-react';
+import {
+  RefreshCw,
+  Loader2,
+  Send,
+  Inbox as InboxIcon,
+  AlertTriangle,
+  CornerUpLeft,
+  Search,
+  X,
+} from 'lucide-react';
 
 interface InboxViewProps {
   data: InboxResponse | null;
@@ -31,6 +40,28 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All' },
 ];
 
+/** Everything in a thread worth searching.
+ *
+ * People look for mail by whoever sent it, by the company, by the subject, or
+ * by a phrase they remember from the body - so all four are searched.
+ */
+function haystack(thread: EmailThread): string {
+  return [
+    thread.subject,
+    thread.counterparty,
+    thread.companyName ?? '',
+    ...thread.messages.map((m) => `${m.fromAddress} ${m.body}`),
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+/** Every term has to appear somewhere, so more words narrow the list. */
+function matches(thread: EmailThread, terms: string[]): boolean {
+  const hay = haystack(thread);
+  return terms.every((term) => hay.includes(term));
+}
+
 function when(iso: string): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -52,6 +83,7 @@ export function InboxView({
   onNavigate,
 }: InboxViewProps) {
   const [filter, setFilter] = useState<Filter>('needs_response');
+  const [query, setQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -61,7 +93,12 @@ export function InboxView({
   const [mailboxId, setMailboxId] = useState('');
   const activeMailbox = mailboxId || sendable[0]?.id || '';
 
-  const threads = useMemo(() => {
+  const terms = useMemo(
+    () => query.trim().toLowerCase().split(/\s+/).filter(Boolean),
+    [query],
+  );
+
+  const byFilter = useMemo(() => {
     const all = data?.threads ?? [];
     if (filter === 'needs_response') return all.filter((t) => t.awaitingReply);
     if (filter === 'positive')
@@ -69,6 +106,18 @@ export function InboxView({
     if (filter === 'unread') return all.filter((t) => t.unread > 0);
     return all;
   }, [data, filter]);
+
+  const threads = useMemo(
+    () => (terms.length === 0 ? byFilter : byFilter.filter((t) => matches(t, terms))),
+    [byFilter, terms],
+  );
+
+  // A search that finds nothing under the current filter is a dead end unless
+  // it says whether the mail exists at all.
+  const elsewhere = useMemo(() => {
+    if (terms.length === 0 || threads.length > 0 || filter === 'all') return 0;
+    return (data?.threads ?? []).filter((t) => matches(t, terms)).length;
+  }, [data, filter, terms, threads.length]);
 
   const selected: EmailThread | null =
     threads.find((t) => t.threadKey === selectedKey) ?? threads[0] ?? null;
@@ -144,33 +193,83 @@ export function InboxView({
         </button>
       </div>
 
-      <div className="flex gap-1.5 flex-wrap">
-        {FILTERS.map((f) => {
-          const count =
-            f.id === 'needs_response'
-              ? data?.needsResponse
-              : f.id === 'positive'
-                ? data?.positive
-                : f.id === 'unread'
-                  ? data?.unread
-                  : data?.threads.length;
-          return (
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
+          {FILTERS.map((f) => {
+            const count =
+              f.id === 'needs_response'
+                ? data?.needsResponse
+                : f.id === 'positive'
+                  ? data?.positive
+                  : f.id === 'unread'
+                    ? data?.unread
+                    : data?.threads.length;
+            return (
+              <button
+                key={f.id}
+                onClick={() => {
+                  setFilter(f.id);
+                  setSelectedKey(null);
+                }}
+                className={filter === f.id ? 'btn btn-primary btn-sm' : 'btn btn-sm'}
+              >
+                {f.label}
+                {count !== undefined && count > 0 && (
+                  <span className="mono text-[11px] opacity-75">{count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search - filters narrow by state, this narrows by content */}
+        <div className="relative ml-auto" style={{ flex: '1 1 240px', maxWidth: 360 }}>
+          <Search
+            className="w-4 h-4 absolute pointer-events-none"
+            strokeWidth={2}
+            style={{ left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-4)' }}
+          />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setQuery('');
+            }}
+            placeholder="Search mail - sender, subject or text"
+            aria-label="Search mail"
+            className="field"
+            style={{ height: 36, fontSize: 13, padding: '0 32px 0 34px' }}
+          />
+          {query && (
             <button
-              key={f.id}
-              onClick={() => {
-                setFilter(f.id);
-                setSelectedKey(null);
+              type="button"
+              onClick={() => setQuery('')}
+              title="Clear search (Esc)"
+              aria-label="Clear search"
+              className="absolute grid place-items-center rounded-full"
+              style={{
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: 20,
+                height: 20,
+                color: 'var(--ink-4)',
+                background: 'transparent',
               }}
-              className={filter === f.id ? 'btn btn-primary btn-sm' : 'btn btn-sm'}
             >
-              {f.label}
-              {count !== undefined && count > 0 && (
-                <span className="mono text-[11px] opacity-75">{count}</span>
-              )}
+              <X className="w-3.5 h-3.5" strokeWidth={2.2} />
             </button>
-          );
-        })}
+          )}
+        </div>
       </div>
+
+      {terms.length > 0 && threads.length > 0 && (
+        <div className="text-[12.5px]" style={{ marginTop: -8, color: 'var(--ink-3)' }}>
+          {threads.length} conversation{threads.length === 1 ? '' : 's'} match{' '}
+          <span style={{ color: 'var(--ink-2)' }}>&ldquo;{query.trim()}&rdquo;</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-4 items-start">
 
@@ -182,7 +281,18 @@ export function InboxView({
             </div>
           ) : threads.length === 0 ? (
             <div className="p-10 text-center text-[13px]" style={{ color: 'var(--ink-4)' }}>
-              Nothing here. Try Sync replies, or a different filter.
+              {terms.length > 0 ? (
+                <>
+                  <div>No mail matches &ldquo;{query.trim()}&rdquo;.</div>
+                  {elsewhere > 0 && (
+                    <button onClick={() => setFilter('all')} className="btn btn-sm mt-3">
+                      {elsewhere} match{elsewhere === 1 ? '' : 'es'} in All
+                    </button>
+                  )}
+                </>
+              ) : (
+                'Nothing here. Try Sync replies, or a different filter.'
+              )}
             </div>
           ) : (
             <div style={{ maxHeight: 620, overflowY: 'auto' }}>

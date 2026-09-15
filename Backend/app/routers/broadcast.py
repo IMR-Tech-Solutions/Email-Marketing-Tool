@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import broadcast as bulk
 from .. import repository
-from ..auth import get_current_user
+from ..auth import get_current_user, require_admin
 from ..config import Settings, get_settings
 from ..db import get_session
 from ..models import (
@@ -25,6 +25,7 @@ from ..models import (
     Mailbox,
     User,
 )
+from ..workspace_settings import effective_signatures
 from ..schemas import (
     BrandOut,
     MessageTemplateOut,
@@ -78,9 +79,13 @@ def _job_schema(job: BroadcastJob, mailbox_address: str = "") -> BroadcastJobOut
 @router.get("", response_model=BroadcastState)
 async def get_state(
     session: AsyncSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
     _user: User = Depends(get_current_user),
 ) -> BroadcastState:
     """The whole screen: the list, the runs, and anything that replied."""
+    # The sign-off under every template, as saved in Settings.
+    signatures = await effective_signatures(session, settings)
+
     recipients = list(
         (await session.execute(select(BroadcastRecipient))).scalars().all()
     )
@@ -196,7 +201,16 @@ async def get_state(
                 key=b.key,
                 name=b.name,
                 site=b.site,
-                templates=[MessageTemplateOut(**vars(t)) for t in b.templates],
+                templates=[
+                    MessageTemplateOut(
+                        key=t.key,
+                        label=t.label,
+                        hint=t.hint,
+                        subject=t.subject,
+                        body=t.body + bulk.signoff(b.key, signatures),
+                    )
+                    for t in b.templates
+                ],
             )
             for b in bulk.BRANDS.values()
         ],
@@ -223,7 +237,7 @@ async def get_state(
 async def upload_list(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> UploadResult:
     """Read a spreadsheet of contacts onto the list.
 
@@ -332,7 +346,7 @@ async def start_broadcast(
     payload: StartBroadcastRequest,
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> BroadcastJobOut:
     """Queue the next N pending recipients and start working through them.
 
@@ -420,7 +434,7 @@ _BACKGROUND: set[asyncio.Task] = set()
 async def cancel_broadcast(
     job_id: str,
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> BroadcastJobOut:
     """Stop after the message in flight. Anything already sent stays sent."""
     try:
@@ -446,7 +460,7 @@ async def clear_list(
     only: str = Query(default="all", pattern="^(all|pending|sent)$"),
     sourceFile: str = Query(default="", max_length=255),
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> ClearResult:
     """Remove rows from the list. Sent history in the Inbox is untouched.
 
@@ -489,7 +503,7 @@ async def export(
     fmt: str = Query(default="xlsx", pattern="^(xlsx|docx|pdf|csv)$", alias="format"),
     scope: str = Query(default="recipients", pattern="^(recipients|clients|replies)$"),
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> Response:
     """Download the list, the client book, or the replies as a real file."""
     if scope == "clients":

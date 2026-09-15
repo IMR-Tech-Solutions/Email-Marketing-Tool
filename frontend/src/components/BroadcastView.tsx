@@ -28,6 +28,8 @@ import {
 
 interface BroadcastViewProps {
   state: BroadcastState | null;
+  /** What the Send step opens with - from Settings. */
+  defaults?: { batchSize: number; delaySeconds: number };
   mailboxes: { id: string; address: string; remainingToday: number; status: string }[];
   isLoading: boolean;
   onUpload: (file: File) => Promise<UploadResult>;
@@ -109,14 +111,15 @@ export function BroadcastView({
   onClear,
   onExport,
   onRefresh,
+  defaults,
 }: BroadcastViewProps) {
   const [step, setStep] = useState<Step>('list');
   const [brandKey, setBrandKey] = useState('');
   const [templateKey, setTemplateKey] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [count, setCount] = useState(10);
-  const [delay, setDelay] = useState(15);
+  const [count, setCount] = useState(defaults?.batchSize ?? 10);
+  const [delay, setDelay] = useState(defaults?.delaySeconds ?? 15);
   const [mailboxId, setMailboxId] = useState('');
   const [tab, setTab] = useState<'list' | 'replies'>('list');
   const [query, setQuery] = useState('');
@@ -129,6 +132,15 @@ export function BroadcastView({
   const [exportOpen, setExportOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const confirmTimer = useRef<number | undefined>(undefined);
+
+  // Settings can load after this mounts. Take them until the send step is
+  // reached, where the person may already have chosen their own.
+  const defaultsKey = defaults ? JSON.stringify(defaults) : '';
+  useEffect(() => {
+    if (!defaults || step === 'send') return;
+    setCount(defaults.batchSize);
+    setDelay(defaults.delaySeconds);
+  }, [defaultsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const brands = state?.brands ?? [];
   const activeJob = state?.jobs.find((j) => j.id === state.activeJobId) ?? null;
@@ -741,7 +753,12 @@ export function BroadcastView({
                       max={300}
                       value={delay}
                       onChange={(e) =>
-                        setDelay(Math.max(5, Math.min(300, Number(e.target.value) || 15)))
+                        setDelay(
+                          Math.max(
+                            5,
+                            Math.min(300, Number(e.target.value) || (defaults?.delaySeconds ?? 15)),
+                          ),
+                        )
                       }
                       className="field"
                       style={{ fontSize: 13, width: 84 }}

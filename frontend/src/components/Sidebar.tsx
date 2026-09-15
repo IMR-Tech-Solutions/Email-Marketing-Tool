@@ -19,9 +19,13 @@ import {
   Plug,
   Settings,
   LogOut,
+  Plus,
   PanelLeftClose,
   PanelLeftOpen,
+  Users,
 } from 'lucide-react';
+import { Role } from '../types';
+import { canView } from '../lib/roles';
 
 interface SidebarProps {
   currentView: string;
@@ -30,6 +34,7 @@ interface SidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   onSignOut: () => void;
+  role: Role;
 }
 
 const NAV: {
@@ -67,6 +72,7 @@ const NAV: {
       { id: 'compliance', label: 'Compliance', icon: ShieldOff, badgeKey: 'suppressed' },
       { id: 'crm', label: 'Integrations', icon: Plug },
       { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'team', label: 'Team', icon: Users },
     ],
   },
 ];
@@ -78,6 +84,7 @@ export function Sidebar({
   collapsed,
   onToggleCollapse,
   onSignOut,
+  role,
 }: SidebarProps) {
   return (
     <aside
@@ -93,22 +100,25 @@ export function Sidebar({
       <div
         className="flex items-center gap-2.5 shrink-0"
         style={{
-          padding: collapsed ? '20px 0 10px' : '20px 18px 10px',
+          padding: collapsed ? '20px 0 12px' : '20px 18px 12px',
           justifyContent: collapsed ? 'center' : undefined,
         }}
       >
         <div
-          className="grid place-items-center rounded-full shrink-0"
-          style={{ width: 32, height: 32, background: 'var(--green-soft)' }}
+          className="grid place-items-center shrink-0"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            background: 'var(--brand-soft)',
+            color: 'var(--brand)',
+          }}
         >
-          <span
-            className="rounded-full"
-            style={{ width: 14, height: 14, border: '3.5px solid var(--green)' }}
-          />
+          <Sparkles className="w-[18px] h-[18px]" strokeWidth={2.4} />
         </div>
         {!collapsed && (
           <>
-            <span style={{ fontSize: 17, fontWeight: 650, letterSpacing: '-0.02em' }}>Sales OS</span>
+            <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.025em' }}>Sales OS</span>
             <button
               onClick={onToggleCollapse}
               className="btn btn-ghost ml-auto"
@@ -120,6 +130,33 @@ export function Sidebar({
             </button>
           </>
         )}
+      </div>
+
+      {/*
+        The violet call to action from the reference. It is the same
+        navigation the Discover item performs, given the weight it deserves.
+      */}
+      <div className="shrink-0" style={{ padding: collapsed ? '0 0 10px' : '0 14px 12px' }}>
+        <button
+          onClick={() => onViewChange('run')}
+          className="btn btn-primary"
+          title={collapsed ? 'Find clients' : undefined}
+          aria-label="Find clients"
+          style={
+            collapsed
+              ? { width: 44, height: 44, padding: 0, borderRadius: 14, margin: '0 auto', display: 'flex' }
+              : { width: '100%', height: 46, borderRadius: 14, justifyContent: 'space-between', fontSize: 14 }
+          }
+        >
+          {collapsed ? (
+            <Plus className="w-5 h-5" strokeWidth={2.6} />
+          ) : (
+            <>
+              <span>Find clients</span>
+              <Plus className="w-4 h-4" strokeWidth={2.8} />
+            </>
+          )}
+        </button>
       </div>
 
       {collapsed && (
@@ -134,7 +171,7 @@ export function Sidebar({
         </button>
       )}
 
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden" style={{ padding: '8px 12px' }}>
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden" style={{ padding: '4px 12px' }}>
         {NAV.map((group) => (
           <div key={group.head} className="mb-4">
             {collapsed ? (
@@ -144,7 +181,7 @@ export function Sidebar({
             )}
 
             <div className="flex flex-col gap-0.5">
-              {group.items.map((item) => {
+              {group.items.filter((item) => canView(role, item.id)).map((item) => {
                 const active = currentView === item.id;
                 const badge = item.badgeKey ? badges[item.badgeKey] : undefined;
                 const Icon = item.icon;
@@ -157,14 +194,14 @@ export function Sidebar({
                     aria-current={active ? 'page' : undefined}
                     className="relative flex items-center transition-colors"
                     style={{
-                      gap: 11,
-                      height: 40,
+                      gap: 12,
+                      height: 42,
                       padding: collapsed ? 0 : '0 12px',
                       justifyContent: collapsed ? 'center' : undefined,
-                      borderRadius: 11,
+                      borderRadius: 12,
                       fontSize: 13.5,
-                      fontWeight: active ? 700 : 500,
-                      background: active ? 'var(--green-soft)' : 'transparent',
+                      fontWeight: active ? 650 : 500,
+                      background: active ? 'var(--brand-soft)' : 'transparent',
                       color: active ? 'var(--ink)' : 'var(--ink-3)',
                     }}
                     onMouseEnter={(e) => {
@@ -174,25 +211,11 @@ export function Sidebar({
                       if (!active) e.currentTarget.style.background = 'transparent';
                     }}
                   >
-                    {/* The green marker from the reference. */}
-                    {active && (
-                      <span
-                        className="absolute rounded-full"
-                        style={{
-                          left: collapsed ? 3 : -4,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          width: 3,
-                          height: 20,
-                          background: 'var(--green)',
-                        }}
-                      />
-                    )}
-
+                    {/* Violet icon is what marks the current screen. */}
                     <Icon
-                      className="w-[17px] h-[17px] shrink-0"
+                      className="w-[18px] h-[18px] shrink-0"
                       strokeWidth={2}
-                      style={{ color: active ? 'var(--green)' : 'var(--ink-4)' }}
+                      style={{ color: active ? 'var(--brand)' : 'var(--ink-4)' }}
                     />
 
                     {!collapsed && <span className="flex-1 text-left truncate">{item.label}</span>}
@@ -202,7 +225,7 @@ export function Sidebar({
                       (collapsed ? (
                         <span
                           className="absolute rounded-full"
-                          style={{ top: 8, right: 14, width: 7, height: 7, background: 'var(--green)' }}
+                          style={{ top: 8, right: 14, width: 7, height: 7, background: 'var(--brand)' }}
                         />
                       ) : (
                         <span
@@ -211,10 +234,10 @@ export function Sidebar({
                             minWidth: 22,
                             height: 20,
                             padding: '0 6px',
-                            borderRadius: 7,
+                            borderRadius: 999,
                             fontSize: 11,
                             fontWeight: 650,
-                            background: active ? 'var(--green)' : 'var(--surface-3)',
+                            background: active ? 'var(--brand)' : 'var(--surface-3)',
                             color: active ? '#fff' : 'var(--ink-3)',
                           }}
                         >
@@ -236,11 +259,11 @@ export function Sidebar({
           aria-label="Log out"
           className="flex items-center transition-colors w-full"
           style={{
-            gap: 11,
-            height: 40,
+            gap: 12,
+            height: 42,
             padding: collapsed ? 0 : '0 12px',
             justifyContent: collapsed ? 'center' : undefined,
-            borderRadius: 11,
+            borderRadius: 12,
             fontSize: 13.5,
             fontWeight: 550,
             color: 'var(--ink-3)',
@@ -249,7 +272,7 @@ export function Sidebar({
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
           <LogOut
-            className="w-[17px] h-[17px] shrink-0"
+            className="w-[18px] h-[18px] shrink-0"
             strokeWidth={2}
             style={{ color: 'var(--ink-4)' }}
           />

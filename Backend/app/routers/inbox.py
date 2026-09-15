@@ -19,6 +19,8 @@ from ..crypto import DecryptionError
 from ..db import get_session
 from ..dependencies import get_agents
 from ..email_service import MailboxError, fetch_messages, send_message, thread_key_for
+from ..signatures import sign
+from ..workspace_settings import effective_signatures
 from ..models import (
     BroadcastRecipient,
     Company,
@@ -635,11 +637,15 @@ async def _campaign_targets(
         return []
 
     company_rows = await session.execute(
-        select(Company.id, Company.name).where(
+        select(Company.id, Company.name, Company.source_icp).where(
             Company.id.in_([c.company_id for c in campaigns])
         )
     )
-    names = {cid: name for cid, name in company_rows.all()}
+    names: dict[uuid.UUID, str] = {}
+    briefs: dict[uuid.UUID, str] = {}
+    for cid, name, icp in company_rows.all():
+        names[cid] = name
+        briefs[cid] = icp or ""
 
     contact_rows = await session.execute(
         select(DecisionMaker).where(
@@ -649,6 +655,7 @@ async def _campaign_targets(
     contacts = {c.id: c for c in contact_rows.scalars().all()}
 
     suppressed = await repository.suppressed_values(session)
+    signatures = await effective_signatures(session, get_settings())
 
     # Anyone already emailed should not be emailed the same thing twice.
     sent_rows = await session.execute(
@@ -676,7 +683,11 @@ async def _campaign_targets(
                 contact=contact.name if contact else "-",
                 email=email,
                 subject=campaign.email_subject,
-                body=campaign.email_body,
+                # Signed here, so the preview shows the exact email that the
+                # send will put on the wire - signature and all.
+                body=sign(
+                    campaign.email_body, briefs.get(campaign.company_id, ""), signatures
+                ),
                 sendable=reason is None,
                 blockedReason=reason,
             )

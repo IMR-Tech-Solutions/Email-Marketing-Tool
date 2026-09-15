@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import get_current_user
+from ..auth import get_current_user, require_admin
 from ..config import Settings, get_settings
 from ..crypto import DecryptionError, decrypt_secret, encrypt_secret, mask
 from ..db import get_session
@@ -110,7 +110,7 @@ async def create_mailbox(
     payload: MailboxCreateRequest,
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> MailboxOut:
     """Connect a mailbox. The credentials are verified before anything is saved.
 
@@ -165,7 +165,7 @@ async def test_mailbox(
     mailbox_id: str,
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> MailboxOut:
     mailbox = await _load(session, mailbox_id)
 
@@ -189,7 +189,7 @@ async def update_mailbox(
     payload: MailboxUpdateRequest,
     session: AsyncSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> MailboxOut:
     mailbox = await _load(session, mailbox_id)
 
@@ -212,7 +212,7 @@ async def update_mailbox(
 async def delete_mailbox(
     mailbox_id: str,
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> None:
     """Removes the mailbox and its stored messages. The credential goes with it."""
     mailbox = await _load(session, mailbox_id)

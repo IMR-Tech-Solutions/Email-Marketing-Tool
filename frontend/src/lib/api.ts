@@ -46,6 +46,9 @@ import {
   ExportFormat,
   ExportScope,
   ClearResult,
+  TeamUser, UserListResponse, Role,
+  WorkspaceSettingsResponse,
+  WorkspaceSettingsValues
 } from '../types';
 import {clearToken, getToken} from './auth';
 
@@ -212,6 +215,49 @@ export const api = {
 
   removeSuppression(id: string) {
     return request<void>(`/api/suppression/${id}`, {method: 'DELETE'});
+  },
+
+  // --- Team accounts (admin only) ---
+
+  listUsers() {
+    return request<UserListResponse>('/api/users');
+  },
+
+  createUser(body: {username: string; password: string; role: Role}) {
+    return request<TeamUser>('/api/users', {method: 'POST', body});
+  },
+
+  updateUser(id: string, body: {password?: string; role?: Role; isActive?: boolean}) {
+    return request<TeamUser>(`/api/users/${id}`, {method: 'PATCH', body});
+  },
+
+  deleteUser(id: string) {
+    return request<void>(`/api/users/${id}`, {method: 'DELETE'});
+  },
+
+  /** The signed-in account changes its own password. Either role. */
+  changePassword(currentPassword: string, newPassword: string) {
+    return request<void>('/api/auth/password', {
+      method: 'POST',
+      body: {currentPassword, newPassword},
+    });
+  },
+
+  // --- Workspace settings ---
+
+  /** Defaults and policies. Both roles read them; only an admin can write. */
+  getSettings() {
+    return request<WorkspaceSettingsResponse>('/api/settings');
+  },
+
+  /** Send only what changed - anything left out stays as it was. */
+  updateSettings(patch: Partial<WorkspaceSettingsValues>) {
+    return request<WorkspaceSettingsResponse>('/api/settings', {method: 'PUT', body: patch});
+  },
+
+  /** Back to the .env values. */
+  resetSettings() {
+    return request<WorkspaceSettingsResponse>('/api/settings/reset', {method: 'POST'});
   },
 
   // --- Mailboxes ---

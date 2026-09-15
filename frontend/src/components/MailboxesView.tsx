@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Mailbox } from '../types';
 import { Plus, Loader2, Trash2, CheckCircle2, AlertTriangle, Mail } from 'lucide-react';
 
@@ -20,6 +20,8 @@ interface MailboxesViewProps {
   onTest: (id: string) => Promise<void>;
   onUpdate: (id: string, body: { dailyLimit?: number; isActive?: boolean }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  /** The limit a new mailbox starts on - from Settings. */
+  defaultDailyLimit?: number;
 }
 
 /** Common hosts, so nobody has to go looking them up. */
@@ -56,6 +58,7 @@ export function MailboxesView({
   onTest,
   onUpdate,
   onDelete,
+  defaultDailyLimit,
 }: MailboxesViewProps) {
   const [showForm, setShowForm] = useState(false);
   const [preset, setPreset] = useState<keyof typeof PRESETS>('Gmail');
@@ -68,12 +71,18 @@ export function MailboxesView({
     smtpPort: PRESETS.Gmail.smtpPort,
     imapHost: PRESETS.Gmail.imap,
     imapPort: PRESETS.Gmail.imapPort,
-    dailyLimit: 40,
+    dailyLimit: defaultDailyLimit ?? 40,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [usernameTouched, setUsernameTouched] = useState(false);
+
+  // Settings can load after this mounts. Only touch a form nobody has opened.
+  useEffect(() => {
+    if (defaultDailyLimit === undefined || showForm) return;
+    setForm((current) => ({ ...current, dailyLimit: defaultDailyLimit }));
+  }, [defaultDailyLimit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /*
    * Providers that authenticate on the full address. Browsers love to autofill

@@ -32,7 +32,9 @@ from .routers import (
     mailboxes,
     pipeline,
     workspace,
+    users,
 )
+from .routers import settings as settings_routes
 from .schemas import HealthResponse
 
 logging.basicConfig(
@@ -163,6 +165,8 @@ app.include_router(inbox.router)
 app.include_router(inbox.outbox_router)
 app.include_router(workspace.router)
 app.include_router(pipeline.router)
+app.include_router(users.router)
+app.include_router(settings_routes.router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["system"])

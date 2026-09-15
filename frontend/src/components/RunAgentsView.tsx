@@ -15,9 +15,11 @@ import {
 } from 'lucide-react';
 import { ICP_PRESETS, CUSTOM_TEMPLATE, IcpPreset } from '../lib/icpPresets';
 import { INDUSTRY_GROUPS } from '../lib/industries';
-import { GeoScope, SearchArea, IndustryMode, IndustryFilter } from '../types';
+import { GeoScope, SearchArea, IndustryMode, IndustryFilter, DiscoveryDefaults } from '../types';
 
 interface RunAgentsViewProps {
+  /** What the wizard opens with - from Settings. Every run can still change them. */
+  defaults?: DiscoveryDefaults;
   onRunPipeline: (
     icp: string,
     count: number,
@@ -155,6 +157,7 @@ function StepBar({
 }
 
 export function RunAgentsView({
+  defaults,
   onRunPipeline,
   isGenerating,
   modelLarge,
@@ -162,13 +165,25 @@ export function RunAgentsView({
 }: RunAgentsViewProps) {
   const [step, setStep] = useState(0);
   const [icp, setIcp] = useState('');
-  const [count, setCount] = useState(1);
+  const [count, setCount] = useState(defaults?.companyCount ?? 1);
   const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [scope, setScope] = useState<GeoScope>('global');
-  const [area, setArea] = useState('');
-  const [industryMode, setIndustryMode] = useState<IndustryMode>('all');
-  const [industry, setIndustry] = useState('');
+  const [scope, setScope] = useState<GeoScope>(defaults?.scope ?? 'global');
+  const [area, setArea] = useState(defaults?.value ?? '');
+  const [industryMode, setIndustryMode] = useState<IndustryMode>(defaults?.industryMode ?? 'all');
+  const [industry, setIndustry] = useState(defaults?.industryValue ?? '');
   const [industryQuery, setIndustryQuery] = useState('');
+
+  // Settings can arrive after this mounts, or change while it is open. Take
+  // them only while the wizard is untouched - never over a brief in progress.
+  const defaultsKey = defaults ? JSON.stringify(defaults) : '';
+  useEffect(() => {
+    if (!defaults || step !== 0 || icp.trim()) return;
+    setCount(defaults.companyCount);
+    setScope(defaults.scope);
+    setArea(defaults.value);
+    setIndustryMode(defaults.industryMode);
+    setIndustry(defaults.industryValue);
+  }, [defaultsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A run started from the last step, but the agents keep going if you walk
   // back through the wizard. Pin the view to Deploy so the progress is where
@@ -563,7 +578,7 @@ export function RunAgentsView({
                   setActivePreset(null);
                 }}
                 disabled={isGenerating}
-                rows={16}
+                rows={24}
                 placeholder="Describe the companies and the buying role you want to reach — industry, size, geography, and what makes them a fit right now."
                 className="field"
                 style={{ resize: 'vertical', lineHeight: 1.65 }}
@@ -637,7 +652,7 @@ export function RunAgentsView({
                     fontSize: 12.5,
                     color: 'var(--ink-2)',
                     lineHeight: 1.6,
-                    maxHeight: 132,
+                    maxHeight: 200,
                     overflowY: 'auto',
                     whiteSpace: 'pre-wrap',
                   }}

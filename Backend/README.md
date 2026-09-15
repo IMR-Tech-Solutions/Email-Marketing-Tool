@@ -116,6 +116,7 @@ scripts/
 | `mailboxes` | Connected mailboxes. Passwords are Fernet ciphertext, never plaintext. |
 | `email_messages` | Every sent and received message, threaded and triaged. |
 | `templates` | Reusable copy with variable checking. |
+| `workspace_settings` | One row: the defaults and policies edited from Settings. Seeded from `.env` on first read; the source of truth after that. |
 
 Ids are server-issued UUIDs. The ids the model invents are discarded, so a
 campaign can never point at the wrong company.
@@ -147,6 +148,10 @@ campaign can never point at the wrong company.
 | `GET` | `/api/priority-queue` | ✓ | Ranked attention list with reasoning |
 | `GET` | `/api/retouch` | ✓ | Decayed-record queue with a cost estimate |
 | `GET` | `/api/agents` | ✓ | Agent roster, triggers and spend |
+| `GET` | `/api/settings` | ✓ | Workspace defaults, policies, signatures, budget, plus read-only `.env` facts |
+| `PUT` | `/api/settings` | admin | Change some of them; anything not sent is left alone |
+| `POST` | `/api/settings/reset` | admin | Back to the `.env` values |
+| `POST` | `/api/auth/password` | ✓ | Change your own password (current one required) |
 
 ## Configuration
 
@@ -160,6 +165,7 @@ campaign can never point at the wrong company.
 | `REFRESH_DAYS_HIGH_ICP_ACTIVE` | `30` | Refresh interval, high ICP in a campaign. |
 | `REFRESH_DAYS_HIGH_ICP_DORMANT` | `90` | Refresh interval, high ICP dormant. |
 | `REFRESH_DAYS_MID_ICP` | `180` | Refresh interval, mid ICP. |
+| `MONTHLY_BUDGET_USD` | `0` | Cap on the month's Claude spend; Discover and Enrich refuse past it. 0 = no cap. |
 | `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` | `admin` / *(none)* | Seeds the first account only. |
 | `SESSION_SECRET` | *(generated)* | Signs tokens. Blank means a new one per restart, which signs everyone out. |
 | `SESSION_HOURS` | `12` | How long a login lasts. |
@@ -167,6 +173,19 @@ campaign can never point at the wrong company.
 | `MAX_CONCURRENT_OUTREACH` | `4` | Outreach drafts generated in parallel. |
 | `ENRICHMENT_DELAY_SECONDS` | `1.5` | Fake latency so the UI spinner is visible. |
 | `CRM_SYNC_DELAY_SECONDS` | `0.8` | Fake latency for the simulated CRM push. |
+
+### Settings in the database
+
+`HIGH_ICP_THRESHOLD`, the three `REFRESH_DAYS_*` values, `ALLOW_GUESSED_EMAILS`
+and `MONTHLY_BUDGET_USD` are **seed values**. The first time anything reads
+them they are copied into the `workspace_settings` row - along with the two
+email signatures and the defaults Discover and Bulk Outreach open with - and
+from then on the app reads the row, not `.env`. An admin edits them from
+Settings; **Settings > Data > Reset** copies `.env` in again.
+
+`workspace_settings.get_runtime_settings` is the dependency that does the
+overlay. Routes that need the live numbers take it in place of
+`get_settings`; everything else keeps the plain `.env` object.
 
 ## Error format
 

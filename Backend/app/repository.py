@@ -22,6 +22,7 @@ from .schemas import CompanyDraft
 from .schemas import ContactOut
 from .schemas import OutreachCampaign as OutreachCampaignSchema
 from .schemas import OutreachDraft, SuppressionEntry
+from .signatures import business_for
 
 # --------------------------------------------------------------------------
 # ORM -> API
@@ -59,6 +60,7 @@ def to_company_schema(company: Company, settings: Settings) -> CompanySchema:
             days, company.icp_score, in_campaign, settings
         ),
         lastVerified=company.last_verified.isoformat() if company.last_verified else None,
+        business=business_for(company.source_icp or ""),
         decisionMakers=[
             ContactOut(
                 id=str(dm.id),
@@ -242,6 +244,18 @@ async def total_cost(session: AsyncSession) -> Decimal:
     return Decimal(str(value or 0))
 
 
+async def month_to_date_cost(session: AsyncSession) -> Decimal:
+    """Recorded spend since the first of the current month, UTC."""
+    now = datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    value = await session.scalar(
+        select(func.coalesce(func.sum(ModelCall.cost_usd), 0)).where(
+            ModelCall.created_at >= start
+        )
+    )
+    return Decimal(str(value or 0))
+
+
 async def spend_by_agent(session: AsyncSession) -> list[tuple]:
     result = await session.execute(
         select(
@@ -332,8 +346,15 @@ async def save_company(
     *,
     company_id: uuid.UUID,
     decision_maker_ids: Sequence[uuid.UUID],
+    primary_email: str = "",
 ) -> Company:
     """Persist one discovered account.
+
+    `primary_email` is the one channel here that did not come from the model.
+    It is an address the company publishes on its own site (or one Hunter had
+    on file), found after the research call and attached to the first contact
+    so the account arrives reachable instead of needing a person to type one
+    in before anything can be sent.
 
     Ids are passed in rather than generated here: the outreach agent needs them
     before anything is written, so the whole run can be saved in one short
@@ -363,8 +384,14 @@ async def save_company(
         stage="lead",
         last_verified=datetime.now(timezone.utc),
         decision_makers=[
-            DecisionMaker(id=dm_id, name=dm.name, title=dm.title, linkedin=dm.linkedin)
-            for dm_id, dm in zip(decision_maker_ids, draft.decisionMakers)
+            DecisionMaker(
+                id=dm_id,
+                name=dm.name,
+                title=dm.title,
+                linkedin=dm.linkedin,
+                email=primary_email if index == 0 else "",
+            )
+            for index, (dm_id, dm) in enumerate(zip(decision_maker_ids, draft.decisionMakers))
         ],
     )
     session.add(company)

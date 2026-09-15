@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Company, OutreachCampaign } from '../types';
-import { Mail, Linkedin, Phone, ShieldAlert, Copy, Check, Search } from 'lucide-react';
+import { CampaignSendPreview, Company, OutreachCampaign } from '../types';
+import { BUSINESSES, BUSINESS_LABEL, BusinessFilter } from '../lib/business';
+import { Mail, Linkedin, Phone, ShieldAlert, Copy, Check, Search, Send } from 'lucide-react';
 
 interface OutreachViewProps {
   companies: Company[];
   outreachCampaigns: OutreachCampaign[];
+  /** Who each draft would go to, and whether it can go. */
+  preview: CampaignSendPreview | null;
+  /** Open the send flow for one client - the draft on screen is what gets sent. */
+  onSend: (companyId: string) => void;
 }
 
 type Channel = 'email' | 'linkedin' | 'call';
@@ -15,18 +20,31 @@ const CHANNELS: { key: Channel; label: string; icon: typeof Mail }[] = [
   { key: 'call', label: 'Call', icon: Phone },
 ];
 
-export function OutreachView({ companies, outreachCampaigns }: OutreachViewProps) {
+export function OutreachView({
+  companies,
+  outreachCampaigns,
+  preview,
+  onSend,
+}: OutreachViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [channel, setChannel] = useState<Channel>('email');
   const [query, setQuery] = useState('');
   const [copied, setCopied] = useState(false);
+  const [business, setBusiness] = useState<BusinessFilter>('all');
 
   const q = query.trim().toLowerCase();
   const nameFor = (id: string) => companies.find((c) => c.id === id)?.name ?? 'Unknown account';
+  const businessFor = (id: string) => companies.find((c) => c.id === id)?.business;
 
   const visible = outreachCampaigns.filter(
-    (c) => !q || nameFor(c.companyId).toLowerCase().includes(q) || c.emailSubject.toLowerCase().includes(q),
+    (c) =>
+      (business === 'all' || businessFor(c.companyId) === business) &&
+      (!q || nameFor(c.companyId).toLowerCase().includes(q) || c.emailSubject.toLowerCase().includes(q)),
   );
+  const countFor = (key: BusinessFilter) =>
+    key === 'all'
+      ? outreachCampaigns.length
+      : outreachCampaigns.filter((c) => businessFor(c.companyId) === key).length;
 
   const selected = visible.find((c) => c.companyId === selectedId) ?? visible[0] ?? null;
 
@@ -47,6 +65,9 @@ export function OutreachView({ companies, outreachCampaigns }: OutreachViewProps
 
   const company = selected ? companies.find((c) => c.id === selected.companyId) : undefined;
   const dm = company?.decisionMakers.find((d) => d.id === selected?.decisionMakerId);
+  const target = selected
+    ? preview?.targets.find((t) => t.companyId === selected.companyId) ?? null
+    : null;
   const score = selected?.personalizationScore ?? 0;
   const scoreColor = score >= 75 ? 'var(--good)' : score >= 50 ? 'var(--warn)' : 'var(--bad)';
 
@@ -73,23 +94,41 @@ export function OutreachView({ companies, outreachCampaigns }: OutreachViewProps
         <div>
           <h1 className="page-title">Campaigns</h1>
           <p className="page-sub">
-            {outreachCampaigns.length} drafted · send them from Clients, or in bulk from
-            Bulk Outreach
+            {outreachCampaigns.length} drafted · read each one here, then send it
           </p>
         </div>
-        <div className="relative">
-          <Search
-            className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
-            strokeWidth={2.4}
-            style={{ color: 'var(--ink-4)' }}
-          />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search drafts…"
-            className="field"
-            style={{ paddingLeft: 40, width: 240, borderRadius: 999 }}
-          />
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="seg" role="tablist" aria-label="Business">
+            {(['all', ...BUSINESSES.map((b) => b.key)] as BusinessFilter[]).map((key) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={business === key}
+                onClick={() => setBusiness(key)}
+                className="seg-btn flex items-center gap-1.5"
+              >
+                {key === 'all' ? 'All' : BUSINESS_LABEL[key]}
+                <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>
+                  {countFor(key)}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="relative">
+            <Search
+              className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
+              strokeWidth={2.4}
+              style={{ color: 'var(--ink-4)' }}
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search drafts…"
+              className="field"
+              style={{ paddingLeft: 40, width: 240, borderRadius: 999 }}
+            />
+          </div>
         </div>
       </div>
 
@@ -144,6 +183,7 @@ export function OutreachView({ companies, outreachCampaigns }: OutreachViewProps
                 <div className="card-title truncate">{company?.name ?? 'Account'}</div>
                 <div className="truncate" style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>
                   {dm ? `${dm.name} · ${dm.title}` : 'Contact'}
+                  {company?.business && ` · from ${BUSINESS_LABEL[company.business]}`}
                 </div>
               </div>
               <span
@@ -171,24 +211,54 @@ export function OutreachView({ companies, outreachCampaigns }: OutreachViewProps
                 ))}
               </div>
 
-              <button onClick={copy} className="btn btn-sm">
-                {copied ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" strokeWidth={3} /> Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" strokeWidth={2.4} /> Copy
-                  </>
+              <div className="flex items-center gap-2 flex-wrap">
+                {channel === 'email' && target && !target.sendable && (
+                  <span className="pill pill-warn" title="Why this one cannot go yet">
+                    {target.blockedReason}
+                  </span>
                 )}
-              </button>
+                <button onClick={copy} className="btn btn-sm">
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" strokeWidth={3} /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" strokeWidth={2.4} /> Copy
+                    </>
+                  )}
+                </button>
+                {channel === 'email' && (
+                  <button
+                    onClick={() => selected && onSend(selected.companyId)}
+                    disabled={!target?.sendable}
+                    className="btn btn-primary btn-sm"
+                    title={
+                      target?.sendable
+                        ? `Send this email to ${target.email}`
+                        : target?.blockedReason ?? 'Not ready to send'
+                    }
+                  >
+                    <Send className="w-3.5 h-3.5" strokeWidth={2.4} /> Send
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="p-6">
               {channel === 'email' && (
                 <div className="letter">
                   <div className="letter-head">{selected.emailSubject}</div>
-                  <div className="letter-body">{selected.emailBody}</div>
+                  {target && (
+                    <div
+                      className="mono"
+                      style={{ fontSize: 11.5, color: 'var(--ink-4)', paddingBottom: 10 }}
+                    >
+                      To {target.contact}
+                      {target.email ? ` <${target.email}>` : ' - no email address yet'}
+                    </div>
+                  )}
+                  <div className="letter-body">{target?.body ?? selected.emailBody}</div>
                 </div>
               )}
 

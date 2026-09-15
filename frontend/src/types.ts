@@ -59,6 +59,8 @@ export type CrmStage = 'lead' | 'contacted' | 'engaged' | 'proposal' | 'won' | '
 export type StatementType = 'data' | 'inference' | 'generation';
 export type FreshnessBand = 'fresh' | 'good' | 'aging' | 'stale' | 'critical';
 
+export type Business = 'tech' | 'market_research';
+
 export interface Company {
   id: string;
   name: string;
@@ -88,6 +90,8 @@ export interface Company {
   enrichmentConfidence?: number | null;
   freshness: FreshnessBand;
   freshnessDays: number;
+  /** Which of the two businesses this account is worked for. */
+  business: Business;
   needsRetouch: boolean;
   lastVerified?: string | null;
   isEnriching?: boolean;
@@ -158,15 +162,34 @@ export interface ClearPipelineResponse {
   deleted: number;
 }
 
+export type Role = 'admin' | 'sales';
+
 export interface LoginResponse {
   accessToken: string;
   tokenType: string;
   expiresIn: number;
   username: string;
+  role: Role;
 }
 
 export interface SessionResponse {
   username: string;
+  role: Role;
+}
+
+// --- Team accounts ---
+
+export interface TeamUser {
+  id: string;
+  username: string;
+  role: Role;
+  isActive: boolean;
+  createdAt?: string | null;
+  lastLoginAt?: string | null;
+}
+
+export interface UserListResponse {
+  users: TeamUser[];
 }
 
 // --- Dashboard, cost and compliance ---
@@ -622,4 +645,51 @@ export interface OutboxResponse {
   replyRate: number;
   /** True when history is longer than the window the screen renders. */
   truncated: boolean;
+}
+
+
+// --- Workspace settings ---------------------------------------------------
+
+/** Everything an admin can change from Settings. Must match schemas.py. */
+export interface WorkspaceSettingsValues {
+  workspaceName: string;
+  defaultCompanyCount: number;
+  defaultGeoScope: GeoScope;
+  defaultGeoValue: string;
+  defaultIndustryMode: IndustryMode;
+  defaultIndustryValue: string;
+  highIcpThreshold: number;
+  refreshDaysHighIcpActive: number;
+  refreshDaysHighIcpDormant: number;
+  refreshDaysMidIcp: number;
+  defaultBatchSize: number;
+  defaultDelaySeconds: number;
+  defaultDailyLimit: number;
+  allowGuessedEmails: boolean;
+  /** 0 means no cap. */
+  monthlyBudgetUsd: number;
+  signatureTech: string;
+  signatureMarketResearch: string;
+}
+
+export interface WorkspaceSettingsResponse {
+  settings: WorkspaceSettingsValues;
+  /** What Reset restores. */
+  envDefaults: WorkspaceSettingsValues;
+  spentThisMonthUsd: number;
+  modelLarge: string;
+  modelSmall: string;
+  claudeConfigured: boolean;
+  hunterConfigured: boolean;
+  sessionHours: number;
+  updatedAt?: string | null;
+}
+
+/** What the Discover wizard opens with, derived from the settings above. */
+export interface DiscoveryDefaults {
+  companyCount: number;
+  scope: GeoScope;
+  value: string;
+  industryMode: IndustryMode;
+  industryValue: string;
 }

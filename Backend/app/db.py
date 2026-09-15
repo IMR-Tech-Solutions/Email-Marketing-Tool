@@ -81,6 +81,9 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("companies", "buying_signals", "TEXT[] NOT NULL DEFAULT '{}'"),
     ("companies", "pain_points", "TEXT[] NOT NULL DEFAULT '{}'"),
     ("decision_makers", "phone", "VARCHAR(64) NOT NULL DEFAULT ''"),
+    # Roles arrived after the first accounts. The default is the lesser role;
+    # seed_initial_user promotes whoever was here before roles existed.
+    ("users", "role", "VARCHAR(20) NOT NULL DEFAULT 'sales'"),
     ("decision_makers", "linkedin_verified", "BOOLEAN NOT NULL DEFAULT false"),
     ("broadcast_recipients", "send_count", "INTEGER NOT NULL DEFAULT 0"),
     ("broadcast_recipients", "location", "VARCHAR(255) NOT NULL DEFAULT ''"),

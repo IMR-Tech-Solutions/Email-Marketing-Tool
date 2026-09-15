@@ -13,11 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import freshness, repository
-from ..auth import get_current_user
-from ..config import Settings, get_settings
+from ..auth import get_current_user, require_admin
+from ..config import Settings
 from ..db import get_session
 from ..dependencies import get_agents
 from ..models import User
+from ..workspace_settings import get_runtime_settings
 from ..schemas import (
     ActionItem,
     AddSuppressionRequest,
@@ -146,7 +147,7 @@ async def _build_actions(session, settings, needs_retouch: int, suppressed: int)
 @router.get("/dashboard", response_model=DashboardResponse)
 async def dashboard(
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> DashboardResponse:
     """The numbers the morning queue is judged on."""
@@ -228,7 +229,7 @@ async def dashboard(
 @router.get("/cost", response_model=CostResponse)
 async def cost(
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> CostResponse:
     """Where the money goes, per agent and per model."""
@@ -304,7 +305,7 @@ async def add_suppression(
 async def remove_suppression(
     entry_id: str,
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> None:
     try:
         parsed = uuid.UUID(entry_id)

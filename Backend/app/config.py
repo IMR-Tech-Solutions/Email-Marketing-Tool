@@ -35,6 +35,20 @@ class Settings(BaseSettings):
     # Free tier at https://hunter.io/api-keys
     hunter_api_key: str = ""
 
+    # Off by default, and think before turning it on.
+    #
+    # With it on, an account that publishes no address anywhere is given the
+    # most likely pattern guess - first.last@domain and so on - so that every
+    # client arrives sendable. The cost is that some of those addresses do not
+    # exist, and mail to an address that does not exist is a hard bounce.
+    # Hard bounces are the single strongest spam signal there is: enough of
+    # them and the sending domain stops reaching anybody's inbox, including
+    # the prospects you got right.
+    #
+    # Worth it for a small, deliberate send you are watching. Not worth it for
+    # volume, and not worth it on a domain you cannot afford to burn.
+    allow_guessed_emails: bool = False
+
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     # --- Dashboard login -------------------------------------------------
@@ -61,6 +75,16 @@ class Settings(BaseSettings):
     refresh_days_high_icp_dormant: int = 90
     refresh_days_mid_icp: int = 180
     high_icp_threshold: int = 75
+
+    # --- Spend guard ------------------------------------------------------
+    # A ceiling on the month's Claude spend, in USD. 0 means no ceiling. Once
+    # the month's recorded spend reaches it, Discover and Enrich refuse to run
+    # until an admin raises it in Settings or the month rolls over. Reply
+    # triage is not gated: losing a reply costs more than a fraction of a cent.
+    #
+    # Like the refresh policy above, this is the seed value. The Settings
+    # screen edits the stored copy - see workspace_settings.py.
+    monthly_budget_usd: float = 0.0
 
     @property
     def cors_origin_list(self) -> list[str]:

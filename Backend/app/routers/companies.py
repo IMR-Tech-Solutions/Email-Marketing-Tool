@@ -13,13 +13,14 @@ from sqlalchemy import select
 
 from .. import repository
 from ..agents import AgentError, SalesAgents
-from ..auth import get_current_user
-from ..config import Settings, get_settings
+from ..auth import get_current_user, require_admin
+from ..config import Settings
 from ..contact_finder import ContactFinder, FinderError
 from ..db import get_session
 from ..dependencies import get_agents
 from ..models import Mailbox, User
 from ..models import DecisionMaker
+from ..workspace_settings import enforce_budget, get_runtime_settings
 from ..schemas import (
     Company,
     DeleteAllResponse,
@@ -87,7 +88,7 @@ def _dossier_lines(company) -> str:
 @router.get("", response_model=PipelineState)
 async def get_pipeline(
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> PipelineState:
     """The whole saved board - what the dashboard loads on sign-in."""
@@ -105,7 +106,7 @@ async def update_company_stage(
     company_id: str,
     payload: UpdateStageRequest,
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> Company:
     """Persist a drag-and-drop on the pipeline board."""
@@ -121,12 +122,13 @@ async def update_company_stage(
 async def enrich_company(
     company_id: str,
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     agents: SalesAgents = Depends(get_agents),
     _user: User = Depends(get_current_user),
 ) -> EnrichCompanyResponse:
     """Enrich one saved account and store the result with its statement type."""
     company = await _load(session, company_id)
+    await enforce_budget(session, settings, "Enrichment")
 
     try:
         result = await agents.enrich_company(
@@ -167,7 +169,7 @@ async def enrich_company(
 @router.delete("", response_model=DeleteAllResponse)
 async def clear_pipeline(
     session: AsyncSession = Depends(get_session),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> DeleteAllResponse:
     """Wipe every saved account. Decision makers and campaigns cascade.
 
@@ -223,7 +225,7 @@ async def find_contact_email(
     contact_id: str,
     payload: FindEmailRequest | None = None,
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> FindEmailResponse:
     """Look up candidate addresses for one contact. Saves nothing.
@@ -278,7 +280,7 @@ async def update_contact(
     contact_id: str,
     payload: UpdateContactRequest,
     session: AsyncSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
     _user: User = Depends(get_current_user),
 ) -> Company:
     """Set the channels a person can be reached on.

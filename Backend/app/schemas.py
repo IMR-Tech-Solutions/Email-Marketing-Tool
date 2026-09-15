@@ -154,6 +154,10 @@ class Company(CompanyDraft):
     needsRetouch: bool = False
     lastVerified: Optional[str] = None
 
+    # Which of the two businesses this account is worked for. Derived from
+    # the brief it was found with, never stored - see signatures.py.
+    business: Literal["tech", "market_research"] = "tech"
+
 
 class OutreachCampaign(OutreachDraft):
     companyId: str
@@ -380,15 +384,50 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+Role = Literal["admin", "sales"]
+
+
 class LoginResponse(BaseModel):
     accessToken: str
     tokenType: Literal["bearer"] = "bearer"
     expiresIn: int
     username: str
+    role: Role
 
 
 class SessionResponse(BaseModel):
     username: str
+    role: Role
+
+
+# --- Team accounts ---------------------------------------------------------
+
+
+class UserOut(BaseModel):
+    id: str
+    username: str
+    role: Role
+    isActive: bool
+    createdAt: Optional[str] = None
+    lastLoginAt: Optional[str] = None
+
+
+class UserListResponse(BaseModel):
+    users: list[UserOut]
+
+
+class CreateUserRequest(BaseModel):
+    username: str = Field(min_length=2, max_length=150)
+    password: str = Field(min_length=8, max_length=200)
+    role: Role = "sales"
+
+
+class UpdateUserRequest(BaseModel):
+    """Every field optional: send only what changes."""
+
+    password: Optional[str] = Field(default=None, min_length=8, max_length=200)
+    role: Optional[Role] = None
+    isActive: Optional[bool] = None
 
 
 CostResponse.model_rebuild()
@@ -849,3 +888,85 @@ class SendCampaignResponse(BaseModel):
     failed: int
     remainingToday: int
     results: list[CampaignSendResult]
+
+
+# --------------------------------------------------------------------------
+# Workspace settings and the signed-in account
+# --------------------------------------------------------------------------
+
+
+class WorkspaceSettingsValues(BaseModel):
+    """Everything an admin can change from the Settings screen.
+
+    The bounds match the ones the endpoints these feed already enforce, so a
+    default can never be a value the form it opens in would refuse.
+    """
+
+    workspaceName: str = Field(min_length=1, max_length=80)
+
+    # What Discover opens with.
+    defaultCompanyCount: int = Field(ge=1, le=10)
+    defaultGeoScope: GeoScope = "global"
+    defaultGeoValue: str = Field(default="", max_length=120)
+    defaultIndustryMode: IndustryMode = "all"
+    defaultIndustryValue: str = Field(default="", max_length=120)
+
+    # Qualification and the refresh policy - see freshness.py.
+    highIcpThreshold: int = Field(ge=1, le=100)
+    refreshDaysHighIcpActive: int = Field(ge=1, le=3650)
+    refreshDaysHighIcpDormant: int = Field(ge=1, le=3650)
+    refreshDaysMidIcp: int = Field(ge=1, le=3650)
+
+    # Sending.
+    defaultBatchSize: int = Field(ge=1, le=100)
+    defaultDelaySeconds: int = Field(ge=5, le=300)
+    defaultDailyLimit: int = Field(ge=1, le=500)
+    allowGuessedEmails: bool = False
+
+    # Claude spend per calendar month, USD. 0 means no cap.
+    monthlyBudgetUsd: float = Field(ge=0, le=1_000_000)
+
+    signatureTech: str = Field(default="", max_length=2000)
+    signatureMarketResearch: str = Field(default="", max_length=2000)
+
+
+class WorkspaceSettingsUpdate(BaseModel):
+    """Every field optional: send only what changes."""
+
+    workspaceName: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    defaultCompanyCount: Optional[int] = Field(default=None, ge=1, le=10)
+    defaultGeoScope: Optional[GeoScope] = None
+    defaultGeoValue: Optional[str] = Field(default=None, max_length=120)
+    defaultIndustryMode: Optional[IndustryMode] = None
+    defaultIndustryValue: Optional[str] = Field(default=None, max_length=120)
+    highIcpThreshold: Optional[int] = Field(default=None, ge=1, le=100)
+    refreshDaysHighIcpActive: Optional[int] = Field(default=None, ge=1, le=3650)
+    refreshDaysHighIcpDormant: Optional[int] = Field(default=None, ge=1, le=3650)
+    refreshDaysMidIcp: Optional[int] = Field(default=None, ge=1, le=3650)
+    defaultBatchSize: Optional[int] = Field(default=None, ge=1, le=100)
+    defaultDelaySeconds: Optional[int] = Field(default=None, ge=5, le=300)
+    defaultDailyLimit: Optional[int] = Field(default=None, ge=1, le=500)
+    allowGuessedEmails: Optional[bool] = None
+    monthlyBudgetUsd: Optional[float] = Field(default=None, ge=0, le=1_000_000)
+    signatureTech: Optional[str] = Field(default=None, max_length=2000)
+    signatureMarketResearch: Optional[str] = Field(default=None, max_length=2000)
+
+
+class WorkspaceSettingsResponse(BaseModel):
+    settings: WorkspaceSettingsValues
+    # What Reset restores: the .env values, or the built-in ones.
+    envDefaults: WorkspaceSettingsValues
+    spentThisMonthUsd: float = 0.0
+    # Read-only facts from .env, reported so nobody hunts for a control that
+    # is not there.
+    modelLarge: str
+    modelSmall: str
+    claudeConfigured: bool
+    hunterConfigured: bool
+    sessionHours: int
+    updatedAt: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str = Field(min_length=1)
+    newPassword: str = Field(min_length=8, max_length=200)
