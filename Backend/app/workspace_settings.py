@@ -12,6 +12,7 @@ fields overlaid from the row, so the rest of the code keeps reading
 
 from __future__ import annotations
 
+import json
 import logging
 from decimal import Decimal
 
@@ -36,10 +37,8 @@ ROW_ID = 1
 _COLUMNS: dict[str, str] = {
     "workspaceName": "workspace_name",
     "defaultCompanyCount": "default_company_count",
-    "defaultGeoScope": "default_geo_scope",
-    "defaultGeoValue": "default_geo_value",
-    "defaultIndustryMode": "default_industry_mode",
-    "defaultIndustryValue": "default_industry_value",
+    "defaultAreas": "default_areas",
+    "defaultSectors": "default_sectors",
     "highIcpThreshold": "high_icp_threshold",
     "refreshDaysHighIcpActive": "refresh_days_high_icp_active",
     "refreshDaysHighIcpDormant": "refresh_days_high_icp_dormant",
@@ -61,10 +60,8 @@ def env_defaults(settings: Settings) -> WorkspaceSettingsValues:
         # Discover opens on one account: that is what a new brief costs to
         # try. Raise it here once the brief has proven itself.
         defaultCompanyCount=1,
-        defaultGeoScope="global",
-        defaultGeoValue="",
-        defaultIndustryMode="all",
-        defaultIndustryValue="",
+        defaultAreas=[],
+        defaultSectors=[],
         highIcpThreshold=settings.high_icp_threshold,
         refreshDaysHighIcpActive=settings.refresh_days_high_icp_active,
         refreshDaysHighIcpDormant=settings.refresh_days_high_icp_dormant,
@@ -79,15 +76,38 @@ def env_defaults(settings: Settings) -> WorkspaceSettingsValues:
     )
 
 
+# Stored as JSON text - see the note on the columns in models.py.
+_JSON_FIELDS = ("defaultAreas", "defaultSectors")
+
+
+def _stored(field: str, value: object) -> object:
+    """The column value for one field."""
+    if field not in _JSON_FIELDS:
+        return value
+    items = [v.model_dump() if hasattr(v, "model_dump") else v for v in value]  # type: ignore[union-attr]
+    return json.dumps(items)
+
+
+def _loaded(field: str, raw: object) -> object:
+    """The field value for one column. A corrupt list reads as empty."""
+    if field not in _JSON_FIELDS:
+        return raw
+    try:
+        parsed = json.loads(raw or "[]")  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def to_values(row: WorkspaceSettings) -> WorkspaceSettingsValues:
-    data = {field: getattr(row, column) for field, column in _COLUMNS.items()}
+    data = {field: _loaded(field, getattr(row, column)) for field, column in _COLUMNS.items()}
     data["monthlyBudgetUsd"] = float(row.monthly_budget_usd or 0)
     return WorkspaceSettingsValues(**data)
 
 
 def apply_values(row: WorkspaceSettings, values: WorkspaceSettingsValues) -> None:
     for field, column in _COLUMNS.items():
-        setattr(row, column, getattr(values, field))
+        setattr(row, column, _stored(field, getattr(values, field)))
 
 
 async def load(session: AsyncSession, settings: Settings) -> WorkspaceSettings:
@@ -106,7 +126,7 @@ async def load(session: AsyncSession, settings: Settings) -> WorkspaceSettings:
         pg_insert(WorkspaceSettings)
         .values(
             id=ROW_ID,
-            **{column: getattr(defaults, field) for field, column in _COLUMNS.items()},
+            **{column: _stored(field, getattr(defaults, field)) for field, column in _COLUMNS.items()},
         )
         .on_conflict_do_nothing(index_elements=["id"])
     )

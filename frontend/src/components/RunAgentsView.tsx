@@ -9,13 +9,12 @@ import {
   Check,
   MapPin,
   Globe,
-  Search,
   Factory,
   Layers,
 } from 'lucide-react';
 import { ICP_PRESETS, CUSTOM_TEMPLATE, IcpPreset } from '../lib/icpPresets';
-import { INDUSTRY_GROUPS } from '../lib/industries';
-import { GeoScope, SearchArea, IndustryMode, IndustryFilter, DiscoveryDefaults } from '../types';
+import { AreaPick, SearchArea, IndustryFilter, DiscoveryDefaults } from '../types';
+import { AreaPicker, SectorPicker, areaLabel, sectorLabel } from './DiscoverFilters';
 
 interface RunAgentsViewProps {
   /** What the wizard opens with - from Settings. Every run can still change them. */
@@ -51,34 +50,6 @@ const WIZARD = [
 const COST_PER_CLIENT = 0.06;
 
 const GROUPS = Array.from(new Set(ICP_PRESETS.map((p) => p.group)));
-
-const SCOPES: { id: GeoScope; label: string }[] = [
-  { id: 'city', label: 'City' },
-  { id: 'state', label: 'State' },
-  { id: 'country', label: 'Country' },
-  { id: 'global', label: 'Worldwide' },
-];
-
-/** Quick picks per scope. The field is free text — these just save typing. */
-const SUGGESTIONS: Record<GeoScope, string[]> = {
-  city: ['Pune', 'Mumbai', 'Bengaluru', 'Delhi', 'Hyderabad', 'Chennai', 'London', 'New York'],
-  state: ['Maharashtra', 'Karnataka', 'Tamil Nadu', 'Gujarat', 'Telangana', 'California', 'Texas'],
-  country: ['India', 'United States', 'United Kingdom', 'Canada', 'Germany', 'Australia'],
-  global: [],
-};
-
-const PLACEHOLDER: Record<GeoScope, string> = {
-  city: 'Pune',
-  state: 'Maharashtra',
-  country: 'India',
-  global: '',
-};
-
-const INDUSTRY_MODES: { id: IndustryMode; label: string }[] = [
-  { id: 'all', label: 'All industries' },
-  { id: 'preset', label: 'Pick a sector' },
-  { id: 'custom', label: 'Custom' },
-];
 
 /* ------------------------------------------------------------------ */
 
@@ -167,11 +138,9 @@ export function RunAgentsView({
   const [icp, setIcp] = useState('');
   const [count, setCount] = useState(defaults?.companyCount ?? 1);
   const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [scope, setScope] = useState<GeoScope>(defaults?.scope ?? 'global');
-  const [area, setArea] = useState(defaults?.value ?? '');
-  const [industryMode, setIndustryMode] = useState<IndustryMode>(defaults?.industryMode ?? 'all');
-  const [industry, setIndustry] = useState(defaults?.industryValue ?? '');
-  const [industryQuery, setIndustryQuery] = useState('');
+  // Both "any of". Empty means no filter.
+  const [areas, setAreas] = useState<AreaPick[]>(defaults?.areas ?? []);
+  const [sectors, setSectors] = useState<string[]>(defaults?.sectors ?? []);
 
   // Settings can arrive after this mounts, or change while it is open. Take
   // them only while the wizard is untouched - never over a brief in progress.
@@ -179,10 +148,8 @@ export function RunAgentsView({
   useEffect(() => {
     if (!defaults || step !== 0 || icp.trim()) return;
     setCount(defaults.companyCount);
-    setScope(defaults.scope);
-    setArea(defaults.value);
-    setIndustryMode(defaults.industryMode);
-    setIndustry(defaults.industryValue);
+    setAreas(defaults.areas);
+    setSectors(defaults.sectors);
   }, [defaultsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A run started from the last step, but the agents keep going if you walk
@@ -202,69 +169,47 @@ export function RunAgentsView({
     setActivePreset('custom');
   };
 
-  const needsArea = scope !== 'global' && !area.trim();
-  const needsIndustry = industryMode !== 'all' && !industry.trim();
-
-  /** The pick-list, narrowed by the search box. Empty query shows everything. */
-  const q = industryQuery.trim().toLowerCase();
-  const industryMatches = q
-    ? INDUSTRY_GROUPS.map((g) => ({
-        ...g,
-        items: g.items.filter((name) => name.toLowerCase().includes(q)),
-      })).filter((g) => g.items.length > 0)
-    : INDUSTRY_GROUPS;
-
   // The template still has its slots in it - running that wastes money.
   const unfilled = /\[[^\]]+\]/.test(icp);
 
   /** Why you cannot leave the step you are on, if you cannot. */
   const blockedWhy = [
     undefined,
-    needsArea
-      ? `Type a ${scope}, or switch to Worldwide`
-      : needsIndustry
-        ? industryMode === 'preset'
-          ? 'Pick a sector, or switch to All industries'
-          : 'Type a sector, or switch to All industries'
-        : undefined,
+    // Filters cannot be half-set: a pick is added or it is not.
+    undefined,
     !icp.trim() ? 'Describe the audience before continuing' : undefined,
     !icp.trim() ? 'Describe the audience first' : undefined,
   ][step];
 
   /** How far the wizard has been unlocked, so the bar knows what to enable. */
-  const reachable = needsArea || needsIndustry ? 1 : !icp.trim() ? 2 : 3;
+  const reachable = !icp.trim() ? 2 : 3;
 
   const deploy = () => {
-    if (!icp.trim() || isGenerating || needsArea || needsIndustry) return;
-    onRunPipeline(
-      icp,
-      count,
-      { scope, value: scope === 'global' ? '' : area.trim() },
-      { mode: industryMode, value: industryMode === 'all' ? '' : industry.trim() },
-    );
+    if (!icp.trim() || isGenerating) return;
+    onRunPipeline(icp, count, { areas }, { sectors });
   };
 
   const geoPill =
-    scope === 'global' ? (
+    areas.length === 0 ? (
       <>
         <Globe className="w-3 h-3" strokeWidth={2.4} /> Worldwide
       </>
     ) : (
       <>
         <MapPin className="w-3 h-3" strokeWidth={2.4} />
-        {area.trim() || `Pick a ${scope}`}
+        {areaLabel(areas)}
       </>
     );
 
   const sectorPill =
-    industryMode === 'all' ? (
+    sectors.length === 0 ? (
       <>
         <Layers className="w-3 h-3" strokeWidth={2.4} /> All industries
       </>
     ) : (
       <>
         <Factory className="w-3 h-3" strokeWidth={2.4} />
-        {industry.trim() || 'No sector yet'}
+        {sectorLabel(sectors)}
       </>
     );
 
@@ -378,191 +323,27 @@ export function RunAgentsView({
           {/* ---------------------------- 2. Filters ---------------------------- */}
           {step === 1 && (
             /* Two columns, with the sector list capped to roughly the height
-               of the geography column beside it. Stacking them instead cured
-               the dead half-column but pushed the card from 653px to 866px,
-               which is worse — this way nothing is empty and nothing scrolls
-               that did not before. */
+               of the geography column beside it, so nothing is empty and
+               nothing scrolls that did not before. Both pickers are
+               multi-select: any of the picks counts, none means no filter. */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
-              {/* Geography */}
               <div className="flex flex-col gap-3">
                 <div className="eyebrow">Where to look</div>
-                <div className="seg self-start" role="tablist">
-                  {SCOPES.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={scope === s.id}
-                      onClick={() => {
-                        setScope(s.id);
-                        if (s.id === 'global') setArea('');
-                      }}
-                      disabled={isGenerating}
-                      className="seg-btn"
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-
-                {scope !== 'global' && (
-                  <>
-                    <input
-                      value={area}
-                      onChange={(e) => setArea(e.target.value)}
-                      disabled={isGenerating}
-                      placeholder={PLACEHOLDER[scope]}
-                      className="field"
-                      style={{ fontSize: 13.5 }}
-                    />
-                    <div className="flex flex-wrap gap-1.5">
-                      {SUGGESTIONS[scope].map((name) => (
-                        <button
-                          key={name}
-                          type="button"
-                          onClick={() => setArea(name)}
-                          disabled={isGenerating}
-                          className="pill"
-                          style={{
-                            cursor: 'pointer',
-                            color: area === name ? 'var(--green)' : undefined,
-                            borderColor: area === name ? 'var(--green-border)' : undefined,
-                            background: area === name ? 'var(--green-soft)' : undefined,
-                          }}
-                        >
-                          {name}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-
+                <AreaPicker areas={areas} onChange={setAreas} disabled={isGenerating} />
                 <p className="quiet">
-                  {scope === 'global'
-                    ? 'No geographic constraint — the agent picks wherever the profile fits best.'
-                    : 'A hard filter, not a preference. Asked for somewhere with few matches, the agent returns fewer accounts rather than padding the list with neighbouring areas.'}
+                  {areas.length === 0
+                    ? 'No geographic constraint — the agent picks wherever the profile fits best. Add cities, states and countries in any mix.'
+                    : 'A hard filter, not a preference. A company in any of these areas counts. Asked for somewhere with few matches, the agent returns fewer accounts rather than padding the list with neighbouring areas.'}
                 </p>
               </div>
 
-              {/* Industry */}
               <div className="flex flex-col gap-3">
                 <div className="eyebrow">Industry</div>
-                <div className="seg self-start" role="tablist">
-                  {INDUSTRY_MODES.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={industryMode === m.id}
-                      onClick={() => {
-                        setIndustryMode(m.id);
-                        // Switching modes clears the pick — a sector chosen
-                        // from the list and one typed by hand are not the same
-                        // answer, and carrying one over mislabels the run.
-                        setIndustry('');
-                        setIndustryQuery('');
-                      }}
-                      disabled={isGenerating}
-                      className="seg-btn"
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-
-                {industryMode === 'preset' && (
-                  <>
-                    <div className="relative">
-                      <Search
-                        className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                        strokeWidth={2.4}
-                        style={{ color: 'var(--ink-4)' }}
-                      />
-                      <input
-                        value={industryQuery}
-                        onChange={(e) => setIndustryQuery(e.target.value)}
-                        disabled={isGenerating}
-                        placeholder="Search industries…"
-                        className="field"
-                        style={{ paddingLeft: 38, fontSize: 13.5 }}
-                      />
-                    </div>
-
-                    {industryMatches.length === 0 ? (
-                      <p className="quiet">
-                        Nothing matches that.{' '}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIndustryMode('custom');
-                            setIndustry(industryQuery.trim());
-                            setIndustryQuery('');
-                          }}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            font: 'inherit',
-                            color: 'var(--green)',
-                            cursor: 'pointer',
-                            textDecoration: 'underline',
-                          }}
-                        >
-                          Use it as a custom sector
-                        </button>
-                        .
-                      </p>
-                    ) : (
-                      <div
-                        className="flex flex-col gap-2.5"
-                        style={{ maxHeight: 196, overflowY: 'auto' }}
-                      >
-                        {industryMatches.map((g) => (
-                          <div key={g.head}>
-                            <div className="eyebrow mb-1.5">{g.head}</div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {g.items.map((name) => (
-                                <button
-                                  key={name}
-                                  type="button"
-                                  onClick={() => setIndustry(name)}
-                                  disabled={isGenerating}
-                                  className="pill"
-                                  style={{
-                                    cursor: 'pointer',
-                                    color: industry === name ? 'var(--green)' : undefined,
-                                    borderColor:
-                                      industry === name ? 'var(--green-border)' : undefined,
-                                    background:
-                                      industry === name ? 'var(--green-soft)' : undefined,
-                                  }}
-                                >
-                                  {name}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {industryMode === 'custom' && (
-                  <input
-                    value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                    disabled={isGenerating}
-                    placeholder="e.g. CNC machining, cold-chain logistics, marine insurance"
-                    className="field"
-                    style={{ fontSize: 13.5 }}
-                  />
-                )}
-
+                <SectorPicker sectors={sectors} onChange={setSectors} disabled={isGenerating} />
                 <p className="quiet">
-                  {industryMode === 'all'
-                    ? 'No sector constraint — the agent picks whichever industries the profile fits best.'
-                    : 'A hard filter, like geography. The agent returns fewer accounts rather than drifting into adjacent sectors to fill the count.'}
+                  {sectors.length === 0
+                    ? 'No sector constraint — the agent picks whichever industries the profile fits best. Pick several, or type your own.'
+                    : 'A hard filter, like geography. A company in any of these sectors counts. The agent returns fewer accounts rather than drifting into adjacent sectors to fill the count.'}
                 </p>
               </div>
             </div>

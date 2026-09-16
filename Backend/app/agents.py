@@ -32,6 +32,7 @@ from .schemas import (
     DecisionMaker,
     EnrichmentDraft,
     IndustryFilter,
+    join_or,
     OutreachDraft,
     ReplyClassification,
     SearchArea,
@@ -48,26 +49,47 @@ def _area_rule(area: "SearchArea | None") -> str:
     outcome that makes a location filter worse than no filter, because the
     list looks right until you read the addresses. Returning fewer is the
     correct answer, and it has to be said explicitly.
+
+    Several areas are "any of": a company in any one of them is in. They are
+    grouped by kind so the instruction reads as a person would write it.
     """
     if area is None or not area.is_set:
         return ""
 
-    noun = {
-        "city": "the city of",
-        "state": "the state or region of",
-        "country": "the country of",
-    }.get(area.scope, "")
+    nouns = {
+        "city": ("the city of", "one of the cities of"),
+        "state": ("the state or region of", "one of the states or regions of"),
+        "country": ("the country of", "one of the countries of"),
+    }
+    parts: list[str] = []
+    for scope, (one, many) in nouns.items():
+        names = [p.value.strip() for p in area.picks if p.scope == scope]
+        if names:
+            parts.append(f"{one if len(names) == 1 else many} {join_or(names)}")
+
+    if len(area.picks) == 1:
+        where = (
+            f"Every company must be headquartered in {parts[0]}, and its "
+            "`headquarters` field must say so."
+        )
+    else:
+        where = (
+            "Every company must be headquartered in ONE of these areas: "
+            + "; ".join(parts)
+            + ". Its `headquarters` field must name the one it is in. Where "
+            "the brief fits companies in more than one of them, spread the "
+            "results rather than taking every account from a single area."
+        )
 
     return (
-        f"\n\nGEOGRAPHY. Every company must be headquartered in {noun} "
-        f"{area.value.strip()}, and its `headquarters` field must say so.\n"
+        f"\n\nGEOGRAPHY. {where}\n"
         "This is a hard filter, not a preference. If you cannot find enough "
         "companies there that fit the profile, RETURN FEWER. Do not pad the "
         "list with companies from nearby cities, regions or countries - a "
         "short accurate list is useful and a padded one is not.\n"
         "Geography is also part of the ICP score: an account that fits the "
-        "profile but sits outside this area does not belong in the results at "
-        "all."
+        "profile but sits outside these areas does not belong in the results "
+        "at all."
     )
 
 
@@ -94,24 +116,38 @@ def _industry_rule(industry: "IndustryFilter | None") -> str:
     six medical device companies, a model will reach into adjacent healthcare
     to fill the count, and the list reads correctly until someone checks what
     the companies actually sell. Fewer is the right answer.
+
+    Several sectors are "any of": a company in any one of them is in.
     """
     if industry is None or not industry.is_set:
         return ""
 
-    name = industry.value.strip()
+    names = industry.picks
+    if len(names) == 1:
+        which = (
+            f"Every company must operate in {names[0]}, and its `industry` "
+            "field must say so in those terms."
+        )
+    else:
+        which = (
+            f"Every company must operate in ONE of these sectors: {join_or(names)}. "
+            "Its `industry` field must name the one it is in, in those terms. "
+            "Where the brief fits companies in more than one of them, spread "
+            "the results rather than taking every account from a single sector."
+        )
 
     return (
-        f"\n\nINDUSTRY. Every company must operate in {name}, and its "
-        "`industry` field must say so in those terms.\n"
+        f"\n\nINDUSTRY. {which}\n"
         "This is a hard filter, not a preference. If you cannot find enough "
-        "companies in that sector that fit the profile, RETURN FEWER. Do not "
-        "reach into adjacent or parent sectors to make up the number.\n"
+        "companies in those sectors that fit the profile, RETURN FEWER. Do "
+        "not reach into adjacent or parent sectors to make up the number.\n"
         "Judge by what the company actually sells, not by who it sells to: a "
         "software vendor serving hospitals is not a healthcare company. Where "
         "the ICP text names other sectors, this filter wins.\n"
-        "Industry is also part of the ICP score: an account outside this "
-        "sector does not belong in the results at all."
+        "Industry is also part of the ICP score: an account outside these "
+        "sectors does not belong in the results at all."
     )
+
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -491,13 +527,17 @@ class SalesAgents:
             "companies that match the brief below. Search first, then write "
             "each row from what you found.\n\n"
             f"Find {company_count} B2B companies "
-            + (f"in the {industry.value.strip()} sector " if industry and industry.is_set else "")
+            + (
+                f"in the {industry.as_label()} sector{'s' if len(industry.picks) > 1 else ''} "
+                if industry and industry.is_set
+                else ""
+            )
             + (f"in {area.as_label()} " if area and area.is_set else "")
             + f"matching this Ideal Customer Profile:\n\n{icp}\n\n"
             "For each one, fill in every field the search results support:\n"
             "  name, revenue            - a band such as '$14.5M' is fine\n"
             "  industry                 - the sector they operate in, and it "
-            "must name the sector asked for above where one was given\n"
+            "must name one of the sectors asked for above where any were given\n"
             "  employees                - headcount, as a number\n"
             "  website                  - the real registered domain, bare, "
             "no scheme, exactly as the search results give it. Leave it EMPTY "
@@ -505,7 +545,7 @@ class SalesAgents:
             "their own, and an empty field says so honestly where a domain "
             "built from the company name just fails later\n"
             "  headquarters             - city and country, and it must name "
-            "the area asked for above where one was given\n"
+            "one of the areas asked for above where any were given\n"
             "  founded                  - the year, as a string\n"
             "  description              - what they do, and how they sell "
             "today\n"

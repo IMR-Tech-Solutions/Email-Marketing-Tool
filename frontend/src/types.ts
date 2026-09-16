@@ -123,20 +123,22 @@ export interface PipelineState {
   outreachCampaigns: OutreachCampaign[];
 }
 
-/** Where Discover should look. `global` ignores `value`. */
-export type GeoScope = 'city' | 'state' | 'country' | 'global';
+export type GeoScope = 'city' | 'state' | 'country';
 
-export interface SearchArea {
+/** One place to stay inside: a city, a state or region, or a country. */
+export interface AreaPick {
   scope: GeoScope;
   value: string;
 }
 
-/** Which sector Discover should stay inside. `all` ignores `value`. */
-export type IndustryMode = 'all' | 'preset' | 'custom';
+/** Where Discover should look. Any of the areas counts; empty means worldwide. */
+export interface SearchArea {
+  areas: AreaPick[];
+}
 
+/** Which sectors Discover should stay inside. Any counts; empty means all industries. */
 export interface IndustryFilter {
-  mode: IndustryMode;
-  value: string;
+  sectors: string[];
 }
 
 export interface RunPipelineResponse extends PipelineState {
@@ -654,10 +656,9 @@ export interface OutboxResponse {
 export interface WorkspaceSettingsValues {
   workspaceName: string;
   defaultCompanyCount: number;
-  defaultGeoScope: GeoScope;
-  defaultGeoValue: string;
-  defaultIndustryMode: IndustryMode;
-  defaultIndustryValue: string;
+  /** Any of these counts. Empty means worldwide, or all industries. */
+  defaultAreas: AreaPick[];
+  defaultSectors: string[];
   highIcpThreshold: number;
   refreshDaysHighIcpActive: number;
   refreshDaysHighIcpDormant: number;
@@ -688,8 +689,6 @@ export interface WorkspaceSettingsResponse {
 /** What the Discover wizard opens with, derived from the settings above. */
 export interface DiscoveryDefaults {
   companyCount: number;
-  scope: GeoScope;
-  value: string;
-  industryMode: IndustryMode;
-  industryValue: string;
+  areas: AreaPick[];
+  sectors: string[];
 }

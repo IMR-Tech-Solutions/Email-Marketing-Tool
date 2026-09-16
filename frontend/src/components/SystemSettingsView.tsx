@@ -18,15 +18,10 @@ import {
   UserRound,
   Wallet,
 } from 'lucide-react';
-import {
-  GeoScope,
-  IndustryMode,
-  Role,
-  WorkspaceSettingsResponse,
-  WorkspaceSettingsValues,
-} from '../types';
+import { Role, WorkspaceSettingsResponse, WorkspaceSettingsValues } from '../types';
 import { canView } from '../lib/roles';
 import { readPrefString, writePrefString } from '../lib/auth';
+import { AreaPicker, SectorPicker } from './DiscoverFilters';
 
 interface SystemSettingsViewProps {
   role: Role;
@@ -59,13 +54,6 @@ const TABS: { key: Tab; label: string; adminOnly: boolean }[] = [
 
 /** The same four Bulk Outreach offers. */
 const BATCH_SIZES = [1, 10, 50, 100];
-
-const SCOPES: { key: GeoScope; label: string; placeholder: string }[] = [
-  { key: 'global', label: 'Worldwide', placeholder: '' },
-  { key: 'city', label: 'City', placeholder: 'Pune, Mumbai…' },
-  { key: 'state', label: 'State or region', placeholder: 'Maharashtra, Karnataka…' },
-  { key: 'country', label: 'Country', placeholder: 'India, United Kingdom…' },
-];
 
 const SIGNATURE_FIELDS: {
   key: 'signatureTech' | 'signatureMarketResearch';
@@ -110,13 +98,6 @@ function when(iso?: string | null): string {
 /** Why the draft cannot be saved as it stands, if it cannot. */
 function validate(d: WorkspaceSettingsValues): string | null {
   if (!d.workspaceName.trim()) return 'Give the workspace a name.';
-  if (d.defaultGeoScope !== 'global' && !d.defaultGeoValue.trim()) {
-    const what = d.defaultGeoScope === 'state' ? 'state or region' : d.defaultGeoScope;
-    return `Name the default ${what}, or set the area to Worldwide.`;
-  }
-  if (d.defaultIndustryMode !== 'all' && !d.defaultIndustryValue.trim()) {
-    return 'Name the default sector, or set it to All industries.';
-  }
   const ordered =
     d.refreshDaysHighIcpActive <= d.refreshDaysHighIcpDormant &&
     d.refreshDaysHighIcpDormant <= d.refreshDaysMidIcp;
@@ -493,7 +474,7 @@ export function SystemSettingsView({
               What the Discover wizard opens with. Every run can still change them before any
               money is spent.
             </Note>
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-4 flex flex-col gap-5">
               <Field
                 label="Companies per run"
                 hint="1 to 10. Roughly twice as many are researched, and only those with a published address are kept."
@@ -507,66 +488,24 @@ export function SystemSettingsView({
                 />
               </Field>
 
-              <Field
-                label="Search area"
-                hint="A hard filter, not a preference. Accounts from outside it are counted and reported after the run."
-              >
-                <div className="flex gap-2">
-                  <select
-                    value={draft.defaultGeoScope}
-                    aria-label="Area type"
-                    onChange={(e) => set('defaultGeoScope', e.target.value as GeoScope)}
-                    className="field"
-                    style={{ width: 'auto', flex: '0 0 auto' }}
-                  >
-                    {SCOPES.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                  {draft.defaultGeoScope !== 'global' && (
-                    <input
-                      type="text"
-                      value={draft.defaultGeoValue}
-                      maxLength={120}
-                      aria-label="Area"
-                      placeholder={SCOPES.find((s) => s.key === draft.defaultGeoScope)?.placeholder}
-                      onChange={(e) => set('defaultGeoValue', e.target.value)}
-                      className="field"
-                    />
-                  )}
-                </div>
-              </Field>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+                <Field
+                  label="Search area"
+                  hint="Cities, states and countries in any mix. Any of them counts; none means worldwide. A hard filter, not a preference."
+                >
+                  <AreaPicker areas={draft.defaultAreas} onChange={(next) => set('defaultAreas', next)} />
+                </Field>
 
-              <Field
-                label="Industry"
-                hint="Free text. No fixed taxonomy survives contact with a real ICP."
-              >
-                <div className="flex gap-2">
-                  <select
-                    value={draft.defaultIndustryMode === 'all' ? 'all' : 'custom'}
-                    aria-label="Industry mode"
-                    onChange={(e) => set('defaultIndustryMode', e.target.value as IndustryMode)}
-                    className="field"
-                    style={{ width: 'auto', flex: '0 0 auto' }}
-                  >
-                    <option value="all">All industries</option>
-                    <option value="custom">A specific sector</option>
-                  </select>
-                  {draft.defaultIndustryMode !== 'all' && (
-                    <input
-                      type="text"
-                      value={draft.defaultIndustryValue}
-                      maxLength={120}
-                      aria-label="Sector"
-                      placeholder="Manufacturing, FMCG, Healthcare…"
-                      onChange={(e) => set('defaultIndustryValue', e.target.value)}
-                      className="field"
-                    />
-                  )}
-                </div>
-              </Field>
+                <Field
+                  label="Industry"
+                  hint="Pick from the list or type your own. Any of them counts; none means all industries."
+                >
+                  <SectorPicker
+                    sectors={draft.defaultSectors}
+                    onChange={(next) => set('defaultSectors', next)}
+                  />
+                </Field>
+              </div>
             </div>
           </Card>
 

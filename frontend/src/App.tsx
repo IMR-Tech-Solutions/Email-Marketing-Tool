@@ -127,10 +127,8 @@ export default function App() {
     if (!s) return undefined;
     return {
       companyCount: s.defaultCompanyCount,
-      scope: s.defaultGeoScope,
-      value: s.defaultGeoValue,
-      industryMode: s.defaultIndustryMode,
-      industryValue: s.defaultIndustryValue,
+      areas: s.defaultAreas,
+      sectors: s.defaultSectors,
     };
   }, [workspaceSettings]);
 

@@ -506,10 +506,15 @@ class WorkspaceSettings(Base):
 
     # What Discover opens with. Every run can still change them.
     default_company_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    default_geo_scope: Mapped[str] = mapped_column(String(16), nullable=False, default="global")
-    default_geo_value: Mapped[str] = mapped_column(String(120), nullable=False, default="")
-    default_industry_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="all")
-    default_industry_value: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    # JSON lists: [{"scope": "city", "value": "Pune"}, ...] and ["Packaging", ...].
+    # Empty means worldwide, or all industries. Text rather than JSONB so the
+    # column is created by the same ADD COLUMN list every late column uses.
+    default_areas: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]", server_default="[]"
+    )
+    default_sectors: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]", server_default="[]"
+    )
 
     # Qualification and the refresh policy - see freshness.py. These start
     # as the .env values and override them once saved.

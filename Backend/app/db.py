@@ -88,12 +88,20 @@ _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("broadcast_recipients", "send_count", "INTEGER NOT NULL DEFAULT 0"),
     ("broadcast_recipients", "location", "VARCHAR(255) NOT NULL DEFAULT ''"),
     ("broadcast_recipients", "duplicate_of_id", "UUID REFERENCES broadcast_recipients(id) ON DELETE SET NULL"),
+    # Discover's defaults became multi-select: several areas, several sectors.
+    ("workspace_settings", "default_areas", "TEXT NOT NULL DEFAULT '[]'"),
+    ("workspace_settings", "default_sectors", "TEXT NOT NULL DEFAULT '[]'"),
 )
 
 # Columns that were replaced rather than added. broadcast_recipients.job_id
 # became broadcast_sends: a recipient belongs to many rounds, not to one job.
 _DROPPED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("broadcast_recipients", "job_id"),
+    # Replaced by the default_areas / default_sectors lists above.
+    ("workspace_settings", "default_geo_scope"),
+    ("workspace_settings", "default_geo_value"),
+    ("workspace_settings", "default_industry_mode"),
+    ("workspace_settings", "default_industry_value"),
 )
 
 

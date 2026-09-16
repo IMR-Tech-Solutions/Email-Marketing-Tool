@@ -135,16 +135,18 @@ Interactive API docs while the backend runs: http://127.0.0.1:8000/docs
 
 ## Searching an area
 
-Discover takes a geography alongside the ICP: a **city** (Pune, Mumbai), a
-**state or region** (Maharashtra, Karnataka), a **country** (India, United
-Kingdom), or **worldwide**. The field is free text; the chips just save typing.
+Discover takes any number of areas alongside the ICP - **cities** (Pune,
+Mumbai), **states or regions** (Maharashtra, Karnataka) and **countries**
+(India, United Kingdom), mixed freely - or **worldwide** when none is picked.
+Sectors work the same way: pick several from the list, or type your own. Both
+are "any of" filters, and both fields are free text; the chips just save typing.
 
 It is a hard filter, not a preference. Asked for ten companies in Pune, a model
 will cheerfully fill the quota with Mumbai and Bengaluru — which is the one
 outcome that makes a location filter worse than none, because the list looks
 right until you read the addresses. So the prompt says to **return fewer rather
 than pad**, and every result is checked afterwards: any account whose
-`headquarters` does not name the area you asked for is counted and reported at
+`headquarters` names none of the areas you asked for is counted and reported at
 the end of the run.
 
 That check is a substring match, so it depends on the model naming the area —

@@ -414,8 +414,12 @@ def _off_target(drafts, area: SearchArea | None) -> int:
     """
     if area is None or not area.is_set:
         return 0
-    needle = area.value.strip().lower()
-    return sum(1 for d in drafts if needle not in (d.headquarters or "").lower())
+    needles = [p.value.strip().lower() for p in area.picks]
+    return sum(
+        1
+        for d in drafts
+        if not any(needle in (d.headquarters or "").lower() for needle in needles)
+    )
 
 
 async def _record_usage(session: AsyncSession, run_usage: RunUsage) -> None:

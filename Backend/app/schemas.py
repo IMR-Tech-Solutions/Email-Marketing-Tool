@@ -171,45 +171,67 @@ class CrmConfig(BaseModel):
     status: CrmStatus = "disconnected"
 
 
-GeoScope = Literal["city", "state", "country", "global"]
+GeoScope = Literal["city", "state", "country"]
+
+
+def join_or(items: list[str]) -> str:
+    """'Pune', 'Pune or Mumbai', 'Pune, Mumbai or Bengaluru'."""
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    return f"{', '.join(items[:-1])} or {items[-1]}"
+
+
+class AreaPick(BaseModel):
+    """One place to stay inside: a city, a state or region, or a country."""
+
+    scope: GeoScope
+    value: str = Field(min_length=1, max_length=120)
 
 
 class SearchArea(BaseModel):
-    """Where to look. Note this is NOT part of any structured-output schema -
-    it is folded into the discovery prompt, so it costs nothing against the
-    grammar complexity budget described above CompanyDraft."""
+    """Where to look: any number of cities, states and countries, matched as
+    "any of". An empty list means worldwide.
 
-    scope: GeoScope = "global"
-    value: str = Field(default="", max_length=120)
+    Note this is NOT part of any structured-output schema - it is folded into
+    the discovery prompt, so it costs nothing against the grammar complexity
+    budget described above CompanyDraft."""
+
+    areas: list[AreaPick] = Field(default_factory=list, max_length=12)
+
+    @property
+    def picks(self) -> list[AreaPick]:
+        return [a for a in self.areas if a.value.strip()]
 
     @property
     def is_set(self) -> bool:
-        return self.scope != "global" and bool(self.value.strip())
+        return bool(self.picks)
 
     def as_label(self) -> str:
-        return self.value.strip() if self.is_set else "worldwide"
-
-
-IndustryMode = Literal["all", "preset", "custom"]
+        return join_or([a.value.strip() for a in self.picks]) or "worldwide"
 
 
 class IndustryFilter(BaseModel):
-    """Which sector to stay inside. Same deal as SearchArea - prompt-side only,
-    so it costs nothing against the structured-output grammar budget.
+    """Which sectors to stay inside, matched as "any of". An empty list means
+    all industries. Same deal as SearchArea - prompt-side only, so it costs
+    nothing against the structured-output grammar budget.
 
-    `preset` and `custom` behave identically once here; the mode is kept only
-    so the UI can say where the value came from. The value is free text either
-    way, because no fixed taxonomy survives contact with a real ICP."""
+    The names are free text, whether they came from the pick-list or were
+    typed, because no fixed taxonomy survives contact with a real ICP."""
 
-    mode: IndustryMode = "all"
-    value: str = Field(default="", max_length=120)
+    sectors: list[str] = Field(default_factory=list, max_length=12)
+
+    @property
+    def picks(self) -> list[str]:
+        return [s.strip() for s in self.sectors if s.strip()]
 
     @property
     def is_set(self) -> bool:
-        return self.mode != "all" and bool(self.value.strip())
+        return bool(self.picks)
 
     def as_label(self) -> str:
-        return self.value.strip() if self.is_set else "all industries"
+        return join_or(self.picks) or "all industries"
 
 
 class RunPipelineRequest(BaseModel):
@@ -906,10 +928,9 @@ class WorkspaceSettingsValues(BaseModel):
 
     # What Discover opens with.
     defaultCompanyCount: int = Field(ge=1, le=10)
-    defaultGeoScope: GeoScope = "global"
-    defaultGeoValue: str = Field(default="", max_length=120)
-    defaultIndustryMode: IndustryMode = "all"
-    defaultIndustryValue: str = Field(default="", max_length=120)
+    # Any of these counts. Empty means worldwide, or all industries.
+    defaultAreas: list[AreaPick] = Field(default_factory=list, max_length=12)
+    defaultSectors: list[str] = Field(default_factory=list, max_length=12)
 
     # Qualification and the refresh policy - see freshness.py.
     highIcpThreshold: int = Field(ge=1, le=100)
@@ -935,10 +956,8 @@ class WorkspaceSettingsUpdate(BaseModel):
 
     workspaceName: Optional[str] = Field(default=None, min_length=1, max_length=80)
     defaultCompanyCount: Optional[int] = Field(default=None, ge=1, le=10)
-    defaultGeoScope: Optional[GeoScope] = None
-    defaultGeoValue: Optional[str] = Field(default=None, max_length=120)
-    defaultIndustryMode: Optional[IndustryMode] = None
-    defaultIndustryValue: Optional[str] = Field(default=None, max_length=120)
+    defaultAreas: Optional[list[AreaPick]] = Field(default=None, max_length=12)
+    defaultSectors: Optional[list[str]] = Field(default=None, max_length=12)
     highIcpThreshold: Optional[int] = Field(default=None, ge=1, le=100)
     refreshDaysHighIcpActive: Optional[int] = Field(default=None, ge=1, le=3650)
     refreshDaysHighIcpDormant: Optional[int] = Field(default=None, ge=1, le=3650)

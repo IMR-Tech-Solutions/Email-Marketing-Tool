@@ -22,6 +22,7 @@ from ..db import get_session
 from ..dependencies import get_agents
 from ..models import User, WorkspaceSettings
 from ..schemas import (
+    AreaPick,
     WorkspaceSettingsResponse,
     WorkspaceSettingsUpdate,
     WorkspaceSettingsValues,
@@ -49,14 +50,35 @@ async def _response(
     )
 
 
+def _squash(text: str) -> str:
+    return " ".join(text.split())
+
+
 def _tidy(values: WorkspaceSettingsValues) -> WorkspaceSettingsValues:
-    """Trim the free-text fields. A signature is stored bare; the blank line
-    above it is added at send time."""
+    """Trim the free-text fields and de-duplicate the lists, case-insensitively.
+    A signature is stored bare; the blank line above it is added at send time."""
+    areas: list[AreaPick] = []
+    seen_areas: set[tuple[str, str]] = set()
+    for pick in values.defaultAreas:
+        name = _squash(pick.value)
+        key = (pick.scope, name.lower())
+        if name and key not in seen_areas:
+            seen_areas.add(key)
+            areas.append(AreaPick(scope=pick.scope, value=name))
+
+    sectors: list[str] = []
+    seen_sectors: set[str] = set()
+    for raw in values.defaultSectors:
+        name = _squash(raw)
+        if name and name.lower() not in seen_sectors:
+            seen_sectors.add(name.lower())
+            sectors.append(name)
+
     return values.model_copy(
         update={
             "workspaceName": values.workspaceName.strip(),
-            "defaultGeoValue": values.defaultGeoValue.strip(),
-            "defaultIndustryValue": values.defaultIndustryValue.strip(),
+            "defaultAreas": areas,
+            "defaultSectors": sectors,
             "signatureTech": values.signatureTech.strip(),
             "signatureMarketResearch": values.signatureMarketResearch.strip(),
         }
@@ -67,15 +89,9 @@ def _check(values: WorkspaceSettingsValues) -> None:
     """The cross-field rules a per-field bound cannot express."""
     if not values.workspaceName:
         raise HTTPException(status_code=400, detail="Give the workspace a name.")
-    if values.defaultGeoScope != "global" and not values.defaultGeoValue:
+    if any(len(name) > 120 for name in values.defaultSectors):
         raise HTTPException(
-            status_code=400,
-            detail="Name the default city, state or country, or set the area to Worldwide.",
-        )
-    if values.defaultIndustryMode != "all" and not values.defaultIndustryValue:
-        raise HTTPException(
-            status_code=400,
-            detail="Name the default sector, or set it to All industries.",
+            status_code=400, detail="A sector name can be at most 120 characters."
         )
     ordered = (
         values.refreshDaysHighIcpActive
@@ -121,7 +137,11 @@ async def update_workspace_settings(
     if not changes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nothing to change.")
 
-    merged = _tidy(ws.to_values(row).model_copy(update=changes))
+    # Validate the merge, not only the patch: model_copy would leave a list
+    # field holding the raw dicts the patch arrived as, not AreaPick models.
+    merged = _tidy(
+        WorkspaceSettingsValues.model_validate({**ws.to_values(row).model_dump(), **changes})
+    )
     _check(merged)
 
     ws.apply_values(row, merged)
